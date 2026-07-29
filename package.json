@@ -4,7 +4,7 @@
   "main": "index.js",
   "scripts": {
     "dev": "nodemon - exec 'ts-node' src/server.ts",
-    "build": "npm install --include=dev && tsc && copyfiles -u 1 src/templates/**/*.hbs dist",
+    "build": "npm install --include=dev && tsc ",
     "start": "node dist/server.js",
     "test": "vitest --config vitest.config.ts --run",
     "test:watch": "vitest --config vitest.config.ts",

@@ -1,4 +1,4 @@
-import Agent from "../models/Agent";
+import Agent, { AgentStatus } from "../models/Agent";
 import { LogisticsRole } from "../models/LogisticsAuth";
 import { buildPaginationQuery } from "../utils/paginationHelper";
 import { createLogisticsUserService } from "./authService";
@@ -266,5 +266,132 @@ export const getAgentByHubIdService = async (
         };
     } catch (error) {
         throw error;
+    }
+};
+
+interface UpdateAgentPayload {
+    fullName?: string;
+    phoneNumber?: string;
+    vehicleType?: string;
+    vehicleNumber?: string;
+    address?: string;
+    emergencyContact?: string;
+    notes?: string;
+    photo?: string;
+    status?: string;
+    hubId?: string;
+    updatedBy?: string;
+}
+
+export const updateAgentService = async (agentId: string, payload: UpdateAgentPayload) => {
+    if (!mongoose.Types.ObjectId.isValid(agentId)) {
+        throw new Error("Invalid Agent ID");
+    }
+
+    const session = await mongoose.startSession();
+
+    try {
+        let updatedAgent: any;
+
+        await session.withTransaction(async () => {
+            const agent = await Agent.findById(agentId).session(session);
+            if (!agent || !agent.isActive) {
+                throw new Error("Agent not found");
+            }
+
+            // If phoneNumber is being changed, check uniqueness
+            if (payload.phoneNumber && payload.phoneNumber !== agent.phoneNumber) {
+                const existingPhone = await Agent.findOne({
+                    phoneNumber: payload.phoneNumber,
+                    _id: { $ne: agentId },
+                }).session(session);
+
+                if (existingPhone) {
+                    throw new Error("Phone number already exists");
+                }
+            }
+
+            // If hubId is being changed, validate hub exists
+            if (payload.hubId) {
+                const hub = await Hub.findById(payload.hubId).session(session);
+                if (!hub) {
+                    throw new Error("Hub not found");
+                }
+            }
+
+            // Update allowed fields
+            const allowedFields = [
+                "fullName", "phoneNumber", "vehicleType", "vehicleNumber",
+                "address", "emergencyContact", "notes", "photo", "status", "hubId",
+            ];
+
+            for (const field of allowedFields) {
+                if (payload[field as keyof UpdateAgentPayload] !== undefined) {
+                    (agent as any)[field] = payload[field as keyof UpdateAgentPayload];
+                }
+            }
+
+            if (payload.updatedBy) {
+                agent.updatedBy = new mongoose.Types.ObjectId(payload.updatedBy);
+            }
+
+            await agent.save({ session });
+            updatedAgent = agent;
+        });
+
+        // Return populated agent
+        return await Agent.findById(agentId)
+            .populate({ path: "hubId", select: "name hubCode" })
+            .lean();
+    } finally {
+        await session.endSession();
+    }
+};
+
+export const deleteAgentService = async (agentId: string, updatedBy?: string) => {
+    if (!mongoose.Types.ObjectId.isValid(agentId)) {
+        throw new Error("Invalid Agent ID");
+    }
+
+    const session = await mongoose.startSession();
+
+    try {
+        let result: any;
+
+        await session.withTransaction(async () => {
+            const agent = await Agent.findById(agentId).session(session);
+            if (!agent || !agent.isActive) {
+                throw new Error("Agent not found");
+            }
+
+            // Soft delete the agent
+            agent.isActive = false;
+            agent.status = AgentStatus.INACTIVE ;
+            if (updatedBy) {
+                agent.updatedBy = new mongoose.Types.ObjectId(updatedBy);
+            }
+            await agent.save({ session });
+
+            // Deactivate the associated LogisticsAuth record
+            if (agent.logisticsAuthId) {
+                await mongoose.model("LogisticsAuth").findByIdAndUpdate(
+                    agent.logisticsAuthId,
+                    {
+                        $set: {
+                            isActive: false,
+                            status: "BLOCKED",
+                            updatedBy: updatedBy ? new mongoose.Types.ObjectId(updatedBy) : undefined,
+                        },
+                    },
+                    { session }
+                );
+            }
+
+            result = { agentId: agent._id, isActive: false };
+        });
+
+        return result;
+    } finally {
+        await session.endSession();
     }
 };

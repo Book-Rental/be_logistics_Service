@@ -1,9 +1,10 @@
-import { METHODS } from "http";
 import {
     createAgentService,
     getAgentByHubIdService,
     getAgentByIdServcie,
     getAllAgentService,
+    updateAgentService,
+    deleteAgentService,
 } from "../services/agentService";
 import { Messages } from "../utils/constants";
 import { failResponse, successResponse } from "../utils/response";
@@ -63,6 +64,7 @@ export const getAllAgents = async (req: Request, res: Response) => {
     }
 };
 
+// GET /agents/:agentId
 export const getAgentById = async (req: Request, res: Response) => {
     try {
         const agentId = req.params.agentId as string;
@@ -77,6 +79,7 @@ export const getAgentById = async (req: Request, res: Response) => {
     }
 };
 
+// GET /agents/hub/:hubId
 export const getAgnetByHubId = async (req: Request, res: Response) => {
     try {
         const hubId = req.params.hubId as string;
@@ -88,5 +91,55 @@ export const getAgnetByHubId = async (req: Request, res: Response) => {
         return successResponse(res, agent, "Agents fetched successfully", StatusCode.OK);
     } catch (error: any) {
         return failResponse(res, error?.message || error, StatusCode.Bad_Request);
+    }
+};
+
+// PATCH /agents/:agentId
+export const updateAgent = async (req: Request, res: Response) => {
+    try {
+        const agentId = req.params.agentId as string;
+        if (!agentId) {
+            return failResponse(res, "Agent ID is required", StatusCode.Bad_Request);
+        }
+
+        const payload = {
+            ...req.body,
+            updatedBy: (req as any).user?.id || req.body.updatedBy,
+        };
+
+        // If photo was uploaded, use the Cloudinary URL
+        if ((req as any).file) {
+            payload.photo = (req as any).file.path;
+        }
+
+        const updatedAgent = await updateAgentService(agentId, payload);
+
+        return successResponse(res, updatedAgent, "Agent updated successfully", StatusCode.OK);
+    } catch (error: any) {
+        const message = error?.message || "Failed to update agent";
+        const conflictErrors = ["Phone number already exists", "Hub not found"];
+        const status = conflictErrors.includes(message) ? 409 : 400;
+
+        return res.status(status).json({
+            success: false,
+            message,
+        });
+    }
+};
+
+// DELETE /agents/:agentId
+export const deleteAgent = async (req: Request, res: Response) => {
+    try {
+        const agentId = req.params.agentId as string;
+        if (!agentId) {
+            return failResponse(res, "Agent ID is required", StatusCode.Bad_Request);
+        }
+
+        const updatedBy = (req as any).user?.id || req.body.updatedBy;
+        const result = await deleteAgentService(agentId, updatedBy);
+
+        return successResponse(res, result, "Agent deleted successfully", StatusCode.OK);
+    } catch (error: any) {
+        return failResponse(res, error?.message || "Failed to delete agent", StatusCode.Bad_Request);
     }
 };

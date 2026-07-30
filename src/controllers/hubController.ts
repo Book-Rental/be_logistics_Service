@@ -1,5 +1,10 @@
 import { Request, Response } from "express";
-import { createHubService, getAllHubsService, getHubByIdService } from "../services/hubService";
+import {
+    createHubService,
+    getAllHubsService,
+    getHubByIdService,
+    getShipmentsByHubService,
+} from "../services/hubService";
 import { failResponse, successResponse } from "../utils/response";
 import { Messages } from "../utils/constants";
 import { StatusCode } from "../utils/StatusCodes";
@@ -58,5 +63,21 @@ export const getHubByHubId = async (req: Request, res: Response) => {
         successResponse(res, hub, Messages.HUB_FETECHED_SUCCESSFULLY, StatusCode.OK);
     } catch (error: any) {
         failResponse(res, error.message || Messages.Internal_Server_Error, StatusCode.Bad_Request);
+    }
+};
+
+export const getShipmentsByHub = async (req: Request, res: Response) => {
+    try {
+        const hubId = req.params.hubId as string;
+
+        const shipments = await getShipmentsByHubService(hubId, req.params);
+
+        return successResponse(res, shipments, "Shipments fetched successfully.", StatusCode.OK);
+    } catch (error: any) {
+        return failResponse(
+            res,
+            error.message,
+            error.statusCode || StatusCode.Internal_Server_Error
+        );
     }
 };

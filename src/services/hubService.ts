@@ -143,3 +143,17 @@ export const getHubByIdService = async (hubId: string) => {
         throw error;
     }
 };
+
+//Finding the Hubs based on the Pincode 
+export const findHubByPincode = async (pincode: string) => {
+    const hub = await Hub.findOne({
+        serviceablePincodes: pincode,
+        status: "Active",
+    });
+
+    if (!hub) {
+        throw new Error(`No hub found for pincode ${pincode}`);
+    }
+
+    return hub;
+};

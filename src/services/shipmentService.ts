@@ -2,6 +2,7 @@ import { JourneyEventType, PaymentMode, ShipmentStatus, ShipmentType } from "../
 import Hub from "../models/hub";
 import Shipment from "../models/shipment";
 import { generateShipmentDetails } from "../utils/shipmentFunction";
+import { findHubByPincode } from "./hubService";
 interface ContactPayload {
     name: string;
     phone: string;
@@ -62,14 +63,14 @@ export const createShipmentService = async (payload: CreateShipmentPayload) => {
     }
 
     // Validate Origin Hub
-    const originHub = await Hub.findById(originHubId);
+    const originHub = await findHubByPincode(sender.pincode);
 
     if (!originHub) {
         throw new Error("Origin hub not found.");
     }
 
     // Validate Destination Hub
-    const destinationHub = await Hub.findById(destinationHubId);
+    const destinationHub = await findHubByPincode(receiver.pincode);
 
     if (!destinationHub) {
         throw new Error("Destination hub not found.");
@@ -78,7 +79,8 @@ export const createShipmentService = async (payload: CreateShipmentPayload) => {
     // Generate Shipment Number & AWB
     const { awbNumber } = await generateShipmentDetails();
 
-    // Create Shipment
+
+
     const shipment = await Shipment.create({
         awbNumber,
 
@@ -96,10 +98,10 @@ export const createShipmentService = async (payload: CreateShipmentPayload) => {
         paymentMode,
         codAmount,
 
-        originHubId,
-        destinationHubId,
+        originHubId: originHub._id,
+        destinationHubId: destinationHub._id,
 
-        currentHubId: originHubId,
+        currentHubId: originHub._id,
         currentStatus: ShipmentStatus.CREATED,
 
         expectedDeliveryDate,
@@ -111,7 +113,7 @@ export const createShipmentService = async (payload: CreateShipmentPayload) => {
                 event: JourneyEventType.SHIPMENT_CREATED,
                 status: ShipmentStatus.CREATED,
 
-                hubId: originHubId,
+                hubId: originHub._id,
 
                 remarks: "Shipment created successfully.",
 

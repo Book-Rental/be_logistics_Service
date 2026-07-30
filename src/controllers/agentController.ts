@@ -86,7 +86,7 @@ export const getAgnetByHubId = async (req: Request, res: Response) => {
         if (!hubId) {
             return failResponse(res, "hubId parameters are required", StatusCode.Bad_Request);
         }
-        const agent = await fetch('asd');
+        const agent = await getAgentByHubIdService(hubId);
 
         return successResponse(res, agent, "Agents fetched successfully", StatusCode.OK);
     } catch (error: any) {

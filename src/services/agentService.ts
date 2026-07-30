@@ -4,6 +4,7 @@ import { buildPaginationQuery } from "../utils/paginationHelper";
 import { createLogisticsUserService } from "./authService";
 import Hub from "../models/hub";
 import mongoose from "mongoose";
+import shipment from "../models/shipment";
 
 export const getAllAgentService = async (query: {
     agentStatus?: string;
@@ -321,8 +322,16 @@ export const updateAgentService = async (agentId: string, payload: UpdateAgentPa
 
             // Update allowed fields
             const allowedFields = [
-                "fullName", "phoneNumber", "vehicleType", "vehicleNumber",
-                "address", "emergencyContact", "notes", "photo", "status", "hubId",
+                "fullName",
+                "phoneNumber",
+                "vehicleType",
+                "vehicleNumber",
+                "address",
+                "emergencyContact",
+                "notes",
+                "photo",
+                "status",
+                "hubId",
             ];
 
             for (const field of allowedFields) {
@@ -366,7 +375,7 @@ export const deleteAgentService = async (agentId: string, updatedBy?: string) =>
 
             // Soft delete the agent
             agent.isActive = false;
-            agent.status = AgentStatus.INACTIVE ;
+            agent.status = AgentStatus.INACTIVE;
             if (updatedBy) {
                 agent.updatedBy = new mongoose.Types.ObjectId(updatedBy);
             }
@@ -380,7 +389,9 @@ export const deleteAgentService = async (agentId: string, updatedBy?: string) =>
                         $set: {
                             isActive: false,
                             status: "BLOCKED",
-                            updatedBy: updatedBy ? new mongoose.Types.ObjectId(updatedBy) : undefined,
+                            updatedBy: updatedBy
+                                ? new mongoose.Types.ObjectId(updatedBy)
+                                : undefined,
                         },
                     },
                     { session }
@@ -394,4 +405,20 @@ export const deleteAgentService = async (agentId: string, updatedBy?: string) =>
     } finally {
         await session.endSession();
     }
+};
+
+export const getAgentShipmentsService = async (agentId: string) => {
+    const shipments = await shipment
+        .find({
+            currentAgentId: agentId,
+            currentStatus: {
+                $nin: ["Delivered", "Returned", "Cancelled"],
+            },
+        })
+        .populate("originHubId", "hubName hubCode address")
+        .populate("destinationHubId", "hubName hubCode address")
+        .populate("currentAgentId", "fullName phoneNumber")
+        .sort({ createdAt: -1 });
+
+    return shipments;
 };

@@ -13,7 +13,7 @@ export enum PaymentMode {
 
 export enum ShipmentStatus {
     CREATED = "Created",
-
+    READY_FOR_PICKUP = "Ready For Pickup",
     PICKUP_ASSIGNED = "Pickup Assigned",
     PICKUP_COMPLETED = "Pickup Completed",
 
@@ -42,6 +42,8 @@ export enum ShipmentStatus {
 
 export enum JourneyEventType {
     SHIPMENT_CREATED = "Shipment Created",
+
+    READY_FOR_PICKUP = "Ready For Pickup",
 
     PICKUP_AGENT_ASSIGNED = "Pickup Agent Assigned",
 

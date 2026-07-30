@@ -5,6 +5,7 @@ import {
     getAllAgentService,
     updateAgentService,
     deleteAgentService,
+    getAgentShipmentsService,
 } from "../services/agentService";
 import { Messages } from "../utils/constants";
 import { failResponse, successResponse } from "../utils/response";
@@ -140,6 +141,33 @@ export const deleteAgent = async (req: Request, res: Response) => {
 
         return successResponse(res, result, "Agent deleted successfully", StatusCode.OK);
     } catch (error: any) {
-        return failResponse(res, error?.message || "Failed to delete agent", StatusCode.Bad_Request);
+        return failResponse(
+            res,
+            error?.message || "Failed to delete agent",
+            StatusCode.Bad_Request
+        );
+    }
+};
+
+export const getAgentShipments = async (req: Request, res: Response) => {
+    try {
+        const agentId = req.params.agentId as string;
+
+        const shipments = await getAgentShipmentsService(agentId);
+
+        return successResponse(
+            res,
+            shipments,
+            "Agent shipments fetched successfully.",
+
+            StatusCode.OK
+        );
+    } catch (error: any) {
+        return failResponse(
+            res,
+
+            error.message,
+            error.statusCode || StatusCode.Internal_Server_Error
+        );
     }
 };

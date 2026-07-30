@@ -1,4 +1,4 @@
-import Hub from "../models/hub";
+import Hub, { HubStatus } from "../models/hub";
 import { createLogisticsUserService } from "./authService";
 import { LogisticsRole } from "../models/LogisticsAuth";
 import { generateHubDetails } from "../utils/generateHubDetails";
@@ -23,6 +23,7 @@ interface CreateHubPayload {
     };
     capacity?: number;
     createdBy?: string;
+    serviceablePincodes: string[];
 }
 
 export const getAllHubsService = async () => {
@@ -37,6 +38,7 @@ export const createHubService = async (payload: CreateHubPayload) => {
         password,
         phoneNumber,
         address,
+        serviceablePincodes,
         location,
         capacity,
         createdBy,
@@ -49,14 +51,35 @@ export const createHubService = async (payload: CreateHubPayload) => {
         let hub: any;
 
         await session.withTransaction(async () => {
-            const existingPhone = await Hub.findOne({ phoneNumber }).session(session);
+            // Check Phone
+            const existingPhone = await Hub.findOne({
+                phoneNumber,
+            }).session(session);
+
             if (existingPhone) {
                 throw new Error("Phone number already exists");
             }
 
-            const existingEmail = await Hub.findOne({ email: normalizedEmail }).session(session);
+            // Check Email
+            const existingEmail = await Hub.findOne({
+                email: normalizedEmail,
+            }).session(session);
+
             if (existingEmail) {
                 throw new Error("Email already exists");
+            }
+
+            // Check Serviceable Pincode Duplicates (Optional)
+            const existingPincode = await Hub.findOne({
+                serviceablePincodes: {
+                    $in: serviceablePincodes,
+                },
+            }).session(session);
+
+            if (existingPincode) {
+                throw new Error(
+                    "One or more serviceable pincodes are already assigned to another hub."
+                );
             }
 
             const { hubId, hubCode } = await generateHubDetails();
@@ -72,16 +95,18 @@ export const createHubService = async (payload: CreateHubPayload) => {
                         email: normalizedEmail,
                         phoneNumber,
                         address,
+                        serviceablePincodes,
                         location,
                         capacity,
+                        currentLoad: 0,
+                        status: HubStatus.ACTIVE,
                         createdBy,
                     },
                 ],
                 { session }
             );
 
-            // Create Login User inside the same transaction, so a failure
-            // here rolls back the Hub creation too - no more orphaned Hubs
+            // Create Logistics User
             const logisticsUser = await createLogisticsUserService({
                 email: normalizedEmail,
                 password,
@@ -91,8 +116,9 @@ export const createHubService = async (payload: CreateHubPayload) => {
                 session,
             });
 
-            // Link the Hub back to its login record
+            // Link Logistics User
             hub.logisticsAuthId = logisticsUser._id;
+
             await hub.save({ session });
         });
 
@@ -102,7 +128,7 @@ export const createHubService = async (payload: CreateHubPayload) => {
     }
 };
 
-//Get Hub By ID Servcie 
+//Get Hub By ID Servcie
 export const getHubByIdService = async (hubId: string) => {
     try {
         if (!mongoose.Types.ObjectId.isValid(hubId)) {

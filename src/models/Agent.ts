@@ -8,7 +8,7 @@ export enum VehicleType {
 
 export enum AgentStatus {
     ACTIVE = "Active",
-    ON_DELIVERY = "On Delivery",
+    ON_DELIVERY = "OnDelivery",
     INACTIVE = "Inactive",
     OFF_DUTY = "Off Duty",
 }

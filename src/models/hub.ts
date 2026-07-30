@@ -18,8 +18,11 @@ export interface IHub extends Document {
         city: string;
         state: string;
         country: string;
-        pincode: string;
+        pincode: string; // Physical hub location
     };
+
+    // Pincodes served by this hub
+    serviceablePincodes: string[];
 
     location: {
         type: "Point";
@@ -87,25 +90,45 @@ const HubSchema = new Schema<IHub>(
                 required: true,
                 trim: true,
             },
+
             city: {
                 type: String,
                 required: true,
                 trim: true,
             },
+
             state: {
                 type: String,
                 required: true,
                 trim: true,
             },
+
             country: {
                 type: String,
                 default: "India",
                 trim: true,
             },
+
             pincode: {
                 type: String,
                 required: true,
                 trim: true,
+            },
+        },
+
+        // Multiple pincodes served by this hub
+        serviceablePincodes: {
+            type: [
+                {
+                    type: String,
+                    trim: true,
+                },
+            ],
+            required: true,
+            default: [],
+            validate: {
+                validator: (value: string[]) => value.length > 0,
+                message: "At least one serviceable pincode is required.",
             },
         },
 
@@ -115,6 +138,7 @@ const HubSchema = new Schema<IHub>(
                 enum: ["Point"],
                 default: "Point",
             },
+
             coordinates: {
                 type: [Number],
                 required: true,
@@ -167,6 +191,9 @@ HubSchema.index({ hubCode: 1 });
 HubSchema.index({ email: 1 });
 HubSchema.index({ phoneNumber: 1 });
 HubSchema.index({ status: 1 });
+
+// Fast lookup while creating shipments
+HubSchema.index({ serviceablePincodes: 1 });
 
 HubSchema.index({
     hubName: "text",

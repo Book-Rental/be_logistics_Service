@@ -11,11 +11,31 @@ import { Messages } from "../utils/constants";
 import { failResponse, successResponse } from "../utils/response";
 import { StatusCode } from "../utils/StatusCodes";
 import { Request, Response } from "express";
+import { uploadToCloudinary } from "../utils/uploadToCloudinary";
 
 // POST /agents
 export const createAgent = async (req: Request, res: Response) => {
     try {
-        const agent = await createAgentService(req.body);
+        const file = req.file;
+
+        let photo: string | undefined;
+
+        if (file) {
+            photo = await uploadToCloudinary(
+                file.buffer,
+                "book-rental/agents",
+                `agent-${Date.now()}`
+            );
+        }
+
+        const agent = await createAgentService({
+            ...req.body,
+            photo,
+            isActive:
+                req.body.isActive !== undefined
+                    ? req.body.isActive === "true"
+                    : true,
+        });
 
         return res.status(201).json({
             success: true,
@@ -30,8 +50,13 @@ export const createAgent = async (req: Request, res: Response) => {
             "Email already exists",
             "Hub not found",
         ];
+
         const status =
-            message === "Hub not found" ? 404 : conflictErrors.includes(message) ? 409 : 400;
+            message === "Hub not found"
+                ? 404
+                : conflictErrors.includes(message)
+                    ? 409
+                    : 400;
 
         return res.status(status).json({
             success: false,
@@ -39,7 +64,6 @@ export const createAgent = async (req: Request, res: Response) => {
         });
     }
 };
-
 // GET /agents?agentStatus=&vehicleType=&search=&page=&limit=
 export const getAllAgents = async (req: Request, res: Response) => {
     try {
@@ -106,6 +130,10 @@ export const updateAgent = async (req: Request, res: Response) => {
         const payload = {
             ...req.body,
             updatedBy: (req as any).user?.id || req.body.updatedBy,
+            isActive:
+                req.body.isActive !== undefined
+                    ? req.body.isActive === "true"
+                    : undefined,
         };
 
         // If photo was uploaded, use the Cloudinary URL

@@ -98,6 +98,7 @@ interface CreateAgentPayload {
     emergencyContact?: string;
     notes?: string;
     photo?: string;
+    isActive?: boolean;
     createdBy?: string;
 }
 
@@ -115,6 +116,7 @@ export const createAgentService = async (payload: CreateAgentPayload) => {
         notes,
         photo,
         createdBy,
+        isActive,
     } = payload;
 
     const normalizedEmail = email.toLowerCase();
@@ -157,6 +159,7 @@ export const createAgentService = async (payload: CreateAgentPayload) => {
                         notes,
                         photo,
                         createdBy,
+                        isActive,
                     },
                 ],
                 { session }
@@ -284,6 +287,7 @@ interface UpdateAgentPayload {
     photo?: string;
     status?: string;
     hubId?: string;
+    isActive?: boolean;
     updatedBy?: string;
 }
 
@@ -335,6 +339,7 @@ export const updateAgentService = async (agentId: string, payload: UpdateAgentPa
                 "photo",
                 "status",
                 "hubId",
+                "isActive",
             ];
 
             for (const field of allowedFields) {

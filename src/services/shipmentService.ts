@@ -192,8 +192,8 @@ export const readyForPickupService = async (orderItemId: string) => {
             });
 
             // Update Agent
-            pickupAgent.isAvailable = false;
-            pickupAgent.status = AgentStatus.ON_DELIVERY;
+            // pickupAgent.isAvailable = false;
+            // pickupAgent.status = AgentStatus.ON_DELIVERY;
             pickupAgent.currentShipmentId = shipment._id;
 
             await pickupAgent.save({ session });

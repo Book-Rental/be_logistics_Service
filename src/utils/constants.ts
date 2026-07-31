@@ -45,6 +45,7 @@ export const Messages = {
     HUB_FETECHED_SUCCESSFULLY: "HUb fetched successfully",
 
     SHIPMENT_CREATED_SUCCESSFULLY: "ShipMent Created successfully",
+    SHIPMENT_FETCHED_SUCCESSFULLY: "Shipment Fetched successfully"
 };
 
 export const EmailSubjects = {

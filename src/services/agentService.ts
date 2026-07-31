@@ -212,16 +212,20 @@ export const getAgentByHubIdService = async (
     query: { page?: number; limit?: number } = {}
 ) => {
     try {
+        // 1. Fail-fast guard against malformed ObjectId casting exceptions
         if (!mongoose.Types.ObjectId.isValid(hubId)) {
             throw new Error("Invalid Hub ID format string requested");
         }
+        console.log('pages', query.page, query.limit)
+        // 2. Setup uniform pagination boundary data via your helper utility
+        const { skip, limit, page } = buildPaginationQuery(query);
 
-        const page = Math.max(1, Number(query.page || 1));
-        const limit = Math.max(1, Math.min(100, Number(query.limit || 10)));
-        const skip = (page - 1) * limit;
+        const filter = {
+            hubId: new mongoose.Types.ObjectId(hubId),
+            isActive: true
+        };
 
-        const filter = { hubId: new mongoose.Types.ObjectId(hubId), isActive: true };
-
+        // 3. Parallelized data fetching and counting matrices execution block
         const [agents, totalRecords] = await Promise.all([
             Agent.find(filter)
                 .select(
@@ -269,7 +273,6 @@ export const getAgentByHubIdService = async (
         throw error;
     }
 };
-
 interface UpdateAgentPayload {
     fullName?: string;
     phoneNumber?: string;

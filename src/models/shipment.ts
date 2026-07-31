@@ -13,8 +13,13 @@ export enum PaymentMode {
 
 export enum ShipmentStatus {
     CREATED = "Created",
+
     READY_FOR_PICKUP = "Ready For Pickup",
+
+    OUT_FOR_PICKUP = "Out For Pickup",
+
     PICKUP_ASSIGNED = "Pickup Assigned",
+
     PICKUP_COMPLETED = "Pickup Completed",
 
     ARRIVED_AT_ORIGIN_HUB = "Arrived At Origin Hub",
@@ -47,6 +52,8 @@ export enum JourneyEventType {
 
     PICKUP_AGENT_ASSIGNED = "Pickup Agent Assigned",
 
+    OUT_FOR_PICKUP = "Out For Pickup",
+
     PICKUP_COMPLETED = "Pickup Completed",
 
     ARRIVED_AT_HUB = "Arrived At Hub",
@@ -76,21 +83,77 @@ export enum JourneyEventType {
     CANCELLED = "Cancelled",
 }
 
+
 const ContactSchema = new Schema(
     {
-        name: String,
-        phone: String,
-        email: String,
+        name: {
+            type: String,
+            required: true,
+            trim: true,
+        },
 
-        addressLine1: String,
-        addressLine2: String,
+        phone: {
+            type: String,
+            required: true,
+            trim: true,
+        },
 
-        city: String,
-        state: String,
-        pincode: String,
+        email: {
+            type: String,
+            trim: true,
+            lowercase: true,
+        },
+
+        addressLine1: {
+            type: String,
+            required: true,
+            trim: true,
+        },
+
+        addressLine2: {
+            type: String,
+            default: "",
+            trim: true,
+        },
+
+        city: {
+            type: String,
+            required: true,
+            trim: true,
+        },
+
+        state: {
+            type: String,
+            required: true,
+            trim: true,
+        },
+
+        pincode: {
+            type: String,
+            required: true,
+            trim: true,
+        },
+
         country: {
             type: String,
             default: "India",
+            trim: true,
+        },
+
+        location: {
+            type: {
+                type: String,
+                enum: ["Point"],
+                default: "Point",
+            },
+            coordinates: {
+                type: [Number],
+                required: true,
+                validate: {
+                    validator: (value: number[]) => value.length === 2,
+                    message: "Coordinates must contain [longitude, latitude].",
+                },
+            },
         },
     },
     {

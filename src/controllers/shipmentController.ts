@@ -2,7 +2,7 @@ import { Request, Response } from "express";
 import { StatusCode } from "../utils/StatusCodes";
 import { successResponse, failResponse, errorResponse } from "../utils/response";
 
-import { createShipmentService, getShipmentByIdService, readyForPickupService } from "../services/shipmentService";
+import { createShipmentService, getShipmentByAgentIdService, getShipmentByIdService, readyForPickupService } from "../services/shipmentService";
 import { Messages } from "../utils/constants";
 
 export const createShipment = async (req: Request, res: Response) => {
@@ -67,11 +67,34 @@ export const getShipmentById = async (req: Request, res: Response) => {
 
     try {
         const shipmentId = req.params.shipmentID as string;
-
+        if (!shipmentId) {
+            return failResponse(res, "shipmentId is required.", StatusCode.Bad_Request);
+        }
         const shipment = await getShipmentByIdService(shipmentId);
 
         successResponse(res, shipment, Messages.SHIPMENT_FETCHED_SUCCESSFULLY, StatusCode.OK)
 
+
+    } catch (error: any) {
+        return failResponse(
+            res,
+            error.message || "Something went wrong.",
+            error.statusCode || StatusCode.Internal_Server_Error
+        );
+    }
+}
+
+
+export const getShipmentByAgentId = async (req: Request, res: Response) => {
+    try {
+        const agentId = req.params.agentId as string;
+
+        if (!agentId) {
+            return failResponse(res, Messages.AGENTID_REQUIRED, StatusCode.Bad_Request);
+        }
+        const shipment = await getShipmentByAgentIdService(agentId);
+
+        successResponse(res, shipment, Messages.SHIPMENT_FETCHED_SUCCESSFULLY, StatusCode.OK)
 
     } catch (error: any) {
         return failResponse(

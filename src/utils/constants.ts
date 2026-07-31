@@ -39,6 +39,7 @@ export const Messages = {
     //Agent Related Message
     AGENT_CREATED_SUCCESSFULLY: "Agent Created successfully",
     AGENT_FETCHED_SUCCESSFULLY: "Agent Fetched successfully",
+    AGENTID_REQUIRED: "Agent Id is Required ",
 
     //HUb Related Messages
 

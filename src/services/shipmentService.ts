@@ -7,6 +7,8 @@ import mongoose from "mongoose";
 import Agent, { AgentStatus } from "../models/Agent";
 import { StatusCode } from "../utils/StatusCodes";
 import { randomUUID } from "crypto";
+import { buildPaginationQuery } from "../utils/paginationHelper";
+import { getOrderItemDetails } from "../helper/orderHelper";
 interface ContactPayload {
     name: string;
     phone: string;
@@ -206,30 +208,49 @@ export const readyForPickupService = async (orderItemId: string) => {
 
 export const getShipmentByIdService = async (shipmentId: string) => {
     try {
-        // 1. Fail-fast guard against malformed ObjectId casting exceptions
+        // Validate Shipment ID
         if (!mongoose.Types.ObjectId.isValid(shipmentId)) {
-            throw new Error("Invalid Shipment ID format string requested");
+            const error: any = new Error("Invalid Shipment ID.");
+            error.statusCode = StatusCode.Bad_Request;
+            throw error;
         }
 
-        // 2. Direct primary-key index lookup with full tracking population trees
+        // Fetch Shipment
         const shipment: any = await Shipment.findById(shipmentId)
-            .populate("originHubId", "name hubCode city address") // Adjust field selections to match your Hub schema
-            .populate("destinationHubId", "name hubCode city address")
-            .populate("currentHubId", "name hubCode city")
-            .populate("currentAgentId", "fullName phoneNumber vehicleType status")
-            .lean(); // Converts MongoDB documents directly into lightweight plain JavaScript objects
+            .populate("originHubId", "hubName hubCode address")
+            .populate("destinationHubId", "hubName hubCode address")
+            .populate("currentHubId", "hubName hubCode address")
+            .populate(
+                "currentAgentId",
+                "fullName phoneNumber vehicleType status"
+            )
+            .lean();
 
-        // 3. Throw explicit clean operational errors if no document matches parameters
         if (!shipment) {
-            throw new Error("Shipment record not found");
+            const error: any = new Error("Shipment not found.");
+            error.statusCode = StatusCode.Not_Found;
+            throw error;
         }
 
-        // 4. Return clean, structured payload mapping matching your MFE tracking specifications
+        // Fetch Order Details from Order Service
+        let orderDetails = null;
+
+        try {
+            orderDetails = await getOrderItemDetails(
+                shipment.orderId,
+                shipment.orderItemId
+            );
+        } catch (err) {
+            console.error("Failed to fetch order details:", err);
+        }
+
         return {
             shipmentId: shipment._id,
             awbNumber: shipment.awbNumber,
+
             orderId: shipment.orderId,
             orderItemId: shipment.orderItemId,
+
             sellerId: shipment.sellerId,
             buyerId: shipment.buyerId,
 
@@ -239,21 +260,116 @@ export const getShipmentByIdService = async (shipmentId: string) => {
             shipmentType: shipment.shipmentType,
             paymentMode: shipment.paymentMode,
             codAmount: shipment.codAmount,
+
             currentStatus: shipment.currentStatus,
             expectedDeliveryDate: shipment.expectedDeliveryDate,
 
             infrastructure: {
-                originHub: shipment.originHubId ?? null,
-                destinationHub: shipment.destinationHubId ?? null,
-                currentHub: shipment.currentHubId ?? null,
+                originHub: shipment.originHubId,
+                destinationHub: shipment.destinationHubId,
+                currentHub: shipment.currentHubId,
             },
 
-            assignedAgent: shipment.currentAgentId ?? null,
-            journeyHistory: shipment.journeyDetails || [],
+            assignedAgent: shipment.currentAgentId,
+
+            // 👇 Order details from Order Service
+            orderDetails,
+
+            journeyHistory: shipment.journeyDetails,
+
             createdAt: shipment.createdAt,
-            updatedAt: shipment.updatedAt
+            updatedAt: shipment.updatedAt,
+        };
+    } catch (error) {
+        throw error;
+    }
+};
+
+
+export const getShipmentByAgentIdService = async (
+    agentId: string,
+    query: {
+        page?: number;
+        limit?: number;
+        currentStatus?: string;
+    } = {}
+) => {
+    try {
+        // Validate Agent Id
+        if (!mongoose.Types.ObjectId.isValid(agentId)) {
+            const error: any = new Error("Invalid Agent ID.");
+            error.statusCode = StatusCode.Bad_Request;
+            throw error;
+        }
+
+        // Check Agent Exists
+        const agent = await Agent.findById(agentId);
+
+        if (!agent) {
+            const error: any = new Error("Agent not found.");
+            error.statusCode = StatusCode.Not_Found;
+            throw error;
+        }
+
+        // Pagination
+        const { skip, limit, page } = buildPaginationQuery(query);
+
+        // Filter
+        const filter: any = {
+            currentAgentId: agent._id,
         };
 
+        if (query.currentStatus) {
+            filter.currentStatus = query.currentStatus;
+        }
+
+        // Fetch Shipments
+        const [shipments, totalRecords] = await Promise.all([
+            Shipment.find(filter)
+                .populate("originHubId", "hubName hubCode")
+                .populate("destinationHubId", "hubName hubCode")
+                .populate("currentHubId", "hubName hubCode")
+                .sort({ createdAt: -1 })
+                .skip(skip)
+                .limit(limit)
+                .lean(),
+
+            Shipment.countDocuments(filter),
+        ]);
+
+        // Append Order Details
+        const shipmentData = await Promise.all(
+            shipments.map(async (shipment: any) => {
+                let orderDetails = null;
+
+                try {
+                    orderDetails = await getOrderItemDetails(
+                        shipment.orderId,
+                        shipment.orderItemId
+                    );
+                } catch (err) {
+                    console.error(
+                        `Failed to fetch order details for shipment ${shipment._id}`
+                    );
+                }
+
+                return {
+                    ...shipment,
+                    orderDetails,
+                };
+            })
+        );
+
+        return {
+            shipments: shipmentData,
+            meta: {
+                totalRecords,
+                totalPages: Math.ceil(totalRecords / limit),
+                currentPage: page,
+                limit,
+                hasMore: page < Math.ceil(totalRecords / limit),
+            },
+        };
     } catch (error) {
         throw error;
     }

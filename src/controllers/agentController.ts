@@ -137,8 +137,12 @@ export const updateAgent = async (req: Request, res: Response) => {
         };
 
         // If photo was uploaded, use the Cloudinary URL
-        if ((req as any).file) {
-            payload.photo = (req as any).file.path;
+        if (req.file) {
+            payload.photo = await uploadToCloudinary(
+                req.file.buffer,
+                "book-rental/agents",
+                `agent-${agentId}-${Date.now()}`
+            );
         }
 
         const updatedAgent = await updateAgentService(agentId, payload);

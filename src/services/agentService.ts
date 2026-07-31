@@ -303,7 +303,7 @@ export const updateAgentService = async (agentId: string, payload: UpdateAgentPa
 
         await session.withTransaction(async () => {
             const agent = await Agent.findById(agentId).session(session);
-            if (!agent || !agent.isActive) {
+            if (!agent) {
                 throw new Error("Agent not found");
             }
 

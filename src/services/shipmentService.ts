@@ -203,3 +203,58 @@ export const readyForPickupService = async (orderItemId: string) => {
         session.endSession();
     }
 };
+
+export const getShipmentByIdService = async (shipmentId: string) => {
+    try {
+        // 1. Fail-fast guard against malformed ObjectId casting exceptions
+        if (!mongoose.Types.ObjectId.isValid(shipmentId)) {
+            throw new Error("Invalid Shipment ID format string requested");
+        }
+
+        // 2. Direct primary-key index lookup with full tracking population trees
+        const shipment: any = await Shipment.findById(shipmentId)
+            .populate("originHubId", "name hubCode city address") // Adjust field selections to match your Hub schema
+            .populate("destinationHubId", "name hubCode city address")
+            .populate("currentHubId", "name hubCode city")
+            .populate("currentAgentId", "fullName phoneNumber vehicleType status")
+            .lean(); // Converts MongoDB documents directly into lightweight plain JavaScript objects
+
+        // 3. Throw explicit clean operational errors if no document matches parameters
+        if (!shipment) {
+            throw new Error("Shipment record not found");
+        }
+
+        // 4. Return clean, structured payload mapping matching your MFE tracking specifications
+        return {
+            shipmentId: shipment._id,
+            awbNumber: shipment.awbNumber,
+            orderId: shipment.orderId,
+            orderItemId: shipment.orderItemId,
+            sellerId: shipment.sellerId,
+            buyerId: shipment.buyerId,
+
+            sender: shipment.sender,
+            receiver: shipment.receiver,
+
+            shipmentType: shipment.shipmentType,
+            paymentMode: shipment.paymentMode,
+            codAmount: shipment.codAmount,
+            currentStatus: shipment.currentStatus,
+            expectedDeliveryDate: shipment.expectedDeliveryDate,
+
+            infrastructure: {
+                originHub: shipment.originHubId ?? null,
+                destinationHub: shipment.destinationHubId ?? null,
+                currentHub: shipment.currentHubId ?? null,
+            },
+
+            assignedAgent: shipment.currentAgentId ?? null,
+            journeyHistory: shipment.journeyDetails || [],
+            createdAt: shipment.createdAt,
+            updatedAt: shipment.updatedAt
+        };
+
+    } catch (error) {
+        throw error;
+    }
+};

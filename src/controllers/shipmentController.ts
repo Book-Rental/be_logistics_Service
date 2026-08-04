@@ -2,7 +2,7 @@ import { Request, Response } from "express";
 import { StatusCode } from "../utils/StatusCodes";
 import { successResponse, failResponse, errorResponse } from "../utils/response";
 
-import { createShipmentService, getShipmentByAgentIdService, getShipmentByIdService, readyForPickupService } from "../services/shipmentService";
+import { createShipmentService, getShipmentByAgentIdService, getShipmentByIdService, readyForPickupService, updateShipmentStatusService } from "../services/shipmentService";
 import { Messages } from "../utils/constants";
 
 export const createShipment = async (req: Request, res: Response) => {
@@ -104,3 +104,29 @@ export const getShipmentByAgentId = async (req: Request, res: Response) => {
         );
     }
 }
+
+export const updateShipmentStatus = async (
+    req: Request,
+    res: Response
+) => {
+    try {
+        const shipment = await updateShipmentStatusService({
+            shipmentId: req.params.shipmentId,
+            ...req.body,
+        });
+
+        return successResponse(
+            res,
+            shipment,
+            "Shipment updated successfully.",
+            StatusCode.OK,
+        );
+    } catch (error: any) {
+        return failResponse(
+            res,
+
+            error.message,
+            error.statusCode || StatusCode.Internal_Server_Error,
+        );
+    }
+};

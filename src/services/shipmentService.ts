@@ -490,3 +490,40 @@ export const updateShipmentStatusService = async (
         throw error;
     }
 };
+
+export const getShipmentByOrderItemIdService = async (
+    orderItemId: string
+) => {
+    if (!mongoose.Types.ObjectId.isValid(orderItemId)) {
+        const error: any = new Error("Invalid Order Item Id.");
+        error.statusCode = StatusCode.Bad_Request;
+        throw error;
+    }
+
+    const shipment = await Shipment.findOne({ orderItemId })
+        .populate(
+            "currentAgentId",
+            "fullName phoneNumber vehicleType"
+        )
+        .lean();
+    console.log('ghghg',orderItemId,shipment)
+    if (!shipment) {
+        const error: any = new Error("Shipment not found.");
+        error.statusCode = StatusCode.Not_Found;
+        throw error;
+    }
+
+    return {
+        shipmentId: shipment._id,
+        awbNumber: shipment.awbNumber,
+        currentStatus: shipment.currentStatus,
+
+        pickupAgent: shipment.currentAgentId,
+
+        journey: shipment.journeyDetails.map((item: any) => ({
+            event: item.event,
+            status: item.status,
+            eventAt: item.eventAt,
+        })),
+    };
+};

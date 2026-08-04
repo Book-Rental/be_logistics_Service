@@ -2,7 +2,7 @@ import { Request, Response } from "express";
 import { StatusCode } from "../utils/StatusCodes";
 import { successResponse, failResponse, errorResponse } from "../utils/response";
 
-import { createShipmentService, getShipmentByAgentIdService, getShipmentByIdService, readyForPickupService, updateShipmentStatusService } from "../services/shipmentService";
+import { createShipmentService, getShipmentByAgentIdService, getShipmentByIdService, getShipmentByOrderItemIdService, readyForPickupService, updateShipmentStatusService } from "../services/shipmentService";
 import { Messages } from "../utils/constants";
 
 export const createShipment = async (req: Request, res: Response) => {
@@ -127,6 +127,39 @@ export const updateShipmentStatus = async (
 
             error.message,
             error.statusCode || StatusCode.Internal_Server_Error,
+        );
+    }
+};
+
+export const getShipmentByOrderItemId = async (
+    req: Request,
+    res: Response
+) => {
+    try {
+        const { orderItemId } = req.params as { orderItemId: string };
+
+        if (!orderItemId) {
+            return failResponse(
+                res,
+                "Order Item Id is required.",
+                StatusCode.Bad_Request
+            );
+        }
+
+        const shipment =
+            await getShipmentByOrderItemIdService(orderItemId);
+
+        return successResponse(
+            res,
+            shipment,
+            "Shipment fetched successfully.",
+            StatusCode.OK
+        );
+    } catch (error: any) {
+        return failResponse(
+            res,
+            error.message,
+            error.statusCode || StatusCode.Internal_Server_Error
         );
     }
 };

@@ -9,6 +9,7 @@ import { StatusCode } from "../utils/StatusCodes";
 import { randomUUID } from "crypto";
 import { buildPaginationQuery } from "../utils/paginationHelper";
 import { getOrderItemDetails } from "../helper/orderHelper";
+import { SHIPMENT_STATUS_TRANSITIONS, UpdateShipmentStatusPayload } from "../utils/shipment";
 interface ContactPayload {
     name: string;
     phone: string;
@@ -370,6 +371,121 @@ export const getShipmentByAgentIdService = async (
                 hasMore: page < Math.ceil(totalRecords / limit),
             },
         };
+    } catch (error) {
+        throw error;
+    }
+};
+
+
+export const updateShipmentStatusService = async (
+    payload: UpdateShipmentStatusPayload
+) => {
+    try {
+        const {
+            shipmentId,
+            status,
+            event,
+            remarks,
+            agentId,
+            hubId,
+            updatedBy,
+        } = payload;
+
+        if (!mongoose.Types.ObjectId.isValid(shipmentId)) {
+            const error: any = new Error("Invalid Shipment Id.");
+            error.statusCode = StatusCode.Bad_Request;
+            throw error;
+        }
+
+        const shipment = await Shipment.findById(shipmentId);
+
+        if (!shipment) {
+            const error: any = new Error("Shipment not found.");
+            error.statusCode = StatusCode.Not_Found;
+            throw error;
+        }
+
+        // Validate status movement
+        const allowedStatuses =
+            SHIPMENT_STATUS_TRANSITIONS[shipment.currentStatus];
+
+        if (!allowedStatuses.includes(status)) {
+            const error: any = new Error(
+                `Shipment cannot move from "${shipment.currentStatus}" to "${status}".`
+            );
+            error.statusCode = StatusCode.Bad_Request;
+            throw error;
+        }
+
+        // Pickup Assignment
+        if (status === ShipmentStatus.PICKUP_ASSIGNED && !agentId) {
+            const error: any = new Error(
+                "Pickup Agent Id is required."
+            );
+            error.statusCode = StatusCode.Bad_Request;
+            throw error;
+        }
+
+        // Delivery Assignment
+        if (
+            status === ShipmentStatus.DELIVERY_AGENT_ASSIGNED &&
+            !agentId
+        ) {
+            const error: any = new Error(
+                "Delivery Agent Id is required."
+            );
+            error.statusCode = StatusCode.Bad_Request;
+            throw error;
+        }
+
+        // Hub Validation
+        if (
+            [
+                ShipmentStatus.ARRIVED_AT_ORIGIN_HUB,
+                ShipmentStatus.SORTING_COMPLETED,
+                ShipmentStatus.IN_TRANSIT,
+                ShipmentStatus.ARRIVED_AT_DESTINATION_HUB,
+            ].includes(status) &&
+            !hubId
+        ) {
+            const error: any = new Error("Hub Id is required.");
+            error.statusCode = StatusCode.Bad_Request;
+            throw error;
+        }
+
+        const normalizedAgentId = agentId
+            ? new mongoose.Types.ObjectId(agentId)
+            : shipment.currentAgentId;
+
+        const normalizedHubId = hubId
+            ? new mongoose.Types.ObjectId(hubId)
+            : shipment.currentHubId;
+
+        shipment.currentStatus = status;
+
+        if (agentId) {
+            shipment.currentAgentId = normalizedAgentId;
+        }
+
+        if (hubId) {
+            shipment.currentHubId = normalizedHubId;
+        }
+
+        shipment.journeyDetails.push({
+            event,
+            status,
+            hubId: normalizedHubId,
+            agentId: normalizedAgentId,
+            remarks: remarks || "",
+            updatedBy: updatedBy
+                ? new mongoose.Types.ObjectId(updatedBy)
+                : null,
+            eventAt: new Date(),
+        });
+
+        await shipment.save();
+
+        return shipment;
     } catch (error) {
         throw error;
     }

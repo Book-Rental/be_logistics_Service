@@ -1,13 +1,23 @@
 import axios from "axios";
 
-export const getOrderItemDetails = async (orderId: string, ItemId: string) => {
+// 🚀 Helper to construct standard headers with the secret token for internal service authorization
+const getInternalHeaders = () => ({
+    "Content-Type": "application/json",
+    "x-internal-service-token": process.env.INTERNAL_SERVICE_SECRET || "",
+});
+
+export const getOrderItemDetails = async (orderId: string, itemId: string) => {
     try {
         const response = await axios.get(
-            `${process.env.ORDER_SERVICE_URL}/api/order/${orderId}/Item/${ItemId}`
+            `${process.env.ORDER_SERVICE_URL}/api/order/${orderId}/Item/${itemId}`,
+            {
+                headers: getInternalHeaders() // 🚀 Fixed Authorization block injection
+            }
         );
 
-        return response.data.data;
+        return response.data?.data || response.data;
     } catch (error: any) {
+        console.error(`Failed to fetch order details for Order: ${orderId}, Item: ${itemId}`, error.message);
         throw new Error(error.response?.data?.message || "Failed to fetch order details.");
     }
 };
@@ -24,14 +34,12 @@ export const updateOrderItemStatus = async (orderId: string, itemId: string, sta
             ],
         };
 
-        // 2. Fire the synchronous PUT network request
+        // 2. Fire the synchronous PUT network request with internal auth headers
         const response = await axios.put(
             `${process.env.ORDER_SERVICE_URL}/api/order/update/${orderId}`,
             payload,
             {
-                headers: {
-                    "Content-Type": "application/json",
-                },
+                headers: getInternalHeaders() // 🚀 Fixed Authorization block injection
             }
         );
 

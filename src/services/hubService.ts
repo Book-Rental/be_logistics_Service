@@ -179,7 +179,18 @@ export const getShipmentsByHubService = async (
         // 2. Setup standard pagination calculations
         const { skip, limit, page } = buildPaginationQuery(query);
         const { currentStatus } = query;
-        console.log('skip', skip, 'limit', limit, 'page', page, 'currentStatus', query.page,query.limit, query.currentStatus);
+        console.log(
+            "skip",
+            skip,
+            "limit",
+            limit,
+            "page",
+            page,
+            "currentStatus",
+            query.page,
+            query.limit,
+            query.currentStatus
+        );
         // 3. Construct direct index filter matching structures
         const filter: any = {
             currentHubId: new mongoose.Types.ObjectId(hubId), // 🚀 Explicit conversion ensures index optimization hits

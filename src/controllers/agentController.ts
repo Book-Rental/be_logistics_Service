@@ -31,10 +31,7 @@ export const createAgent = async (req: Request, res: Response) => {
         const agent = await createAgentService({
             ...req.body,
             photo,
-            isActive:
-                req.body.isActive !== undefined
-                    ? req.body.isActive === "true"
-                    : true,
+            isActive: req.body.isActive !== undefined ? req.body.isActive === "true" : true,
         });
 
         return res.status(201).json({
@@ -52,11 +49,7 @@ export const createAgent = async (req: Request, res: Response) => {
         ];
 
         const status =
-            message === "Hub not found"
-                ? 404
-                : conflictErrors.includes(message)
-                    ? 409
-                    : 400;
+            message === "Hub not found" ? 404 : conflictErrors.includes(message) ? 409 : 400;
 
         return res.status(status).json({
             success: false,
@@ -130,10 +123,7 @@ export const updateAgent = async (req: Request, res: Response) => {
         const payload = {
             ...req.body,
             updatedBy: (req as any).user?.id || req.body.updatedBy,
-            isActive:
-                req.body.isActive !== undefined
-                    ? req.body.isActive === "true"
-                    : undefined,
+            isActive: req.body.isActive !== undefined ? req.body.isActive === "true" : undefined,
         };
 
         // If photo was uploaded, use the Cloudinary URL

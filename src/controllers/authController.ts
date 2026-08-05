@@ -18,7 +18,7 @@ export const loginLogistics = async (req: Request, res: Response): Promise<void>
             failResponse(res, Messages.User_Not_Available, StatusCode.Not_Found);
             return;
         }
-        console.log('userInfo', userInfo, 'credentials', credentials)
+        console.log("userInfo", userInfo, "credentials", credentials);
         if (userInfo?.password) {
             const password = await comparePasswords(credentials.password, userInfo.password);
             if (!password) {

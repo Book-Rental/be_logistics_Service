@@ -5,6 +5,7 @@ import { createLogisticsUserService } from "./authService";
 import Hub from "../models/hub";
 import mongoose from "mongoose";
 import shipment from "../models/shipment";
+import { StatusCode } from "../utils/StatusCodes";
 
 export const getAllAgentService = async (query: {
     agentStatus?: string;
@@ -209,7 +210,6 @@ export const getAgentByIdServcie = async (agentId: string) => {
         throw error;
     }
 };
-
 export const getAgentByHubIdService = async (
     hubId: string,
     query: { page?: number; limit?: number; status?: AgentStatus } = {}
@@ -217,21 +217,38 @@ export const getAgentByHubIdService = async (
     try {
         // 1. Fail-fast guard against malformed ObjectId casting exceptions
         if (!mongoose.Types.ObjectId.isValid(hubId)) {
-            throw new Error("Invalid Hub ID format string requested");
+            const error: any = new Error("Invalid Hub ID format string requested");
+            error.statusCode = StatusCode.Bad_Request;
+            throw error;
         }
-        console.log("pages", query.page, query.limit);
+
         // 2. Setup uniform pagination boundary data via your helper utility
         const { skip, limit, page } = buildPaginationQuery(query);
 
-        const filter = {
+        // This main search filter respects user query changes
+        const searchFilter = {
             hubId: new mongoose.Types.ObjectId(hubId),
             isActive: true,
             ...(query.status ? { status: query.status } : {}),
         };
 
-        // 3. Parallelized data fetching and counting matrices execution block
-        const [agents, totalRecords] = await Promise.all([
-            Agent.find(filter)
+        // Base query layout used strictly to fetch complete status analytics for this Hub
+        const hubSummaryFilter = {
+            hubId: new mongoose.Types.ObjectId(hubId),
+            isActive: true,
+        };
+
+        // 3. Parallelized data fetching, pagination matching, and structural count analytics counters
+        const [
+            agents,
+            totalRecords,
+            totalHubAgents,
+            activeHubAgents,
+            inactiveHubAgents,
+            offDutyHubAgents
+        ] = await Promise.all([
+            // Paginated record subset
+            Agent.find(searchFilter)
                 .select(
                     "agentId fullName email phoneNumber status isAvailable vehicleType vehicleNumber currentLocation currentShipmentId photo joinedOn"
                 )
@@ -239,7 +256,15 @@ export const getAgentByHubIdService = async (
                 .skip(skip)
                 .limit(limit)
                 .lean(),
-            Agent.countDocuments(filter),
+
+            // Total records matching current filtered search criteria (for page counts)
+            Agent.countDocuments(searchFilter),
+
+            // 🚀 Analytics Counters: Checked across the entire hub, ignoring current viewport status filters
+            Agent.countDocuments(hubSummaryFilter),
+            Agent.countDocuments({ ...hubSummaryFilter, status: "Active" }),   // Adjust lowercase/uppercase to match your Enum exactly
+            Agent.countDocuments({ ...hubSummaryFilter, status: "Inactive" }), // Adjust lowercase/uppercase to match your Enum exactly
+            Agent.countDocuments({ ...hubSummaryFilter, status: "Off Duty" }), // Adjust lowercase/uppercase to match your Enum exactly
         ]);
 
         const totalPages = Math.ceil(totalRecords / limit) || 1;
@@ -265,8 +290,14 @@ export const getAgentByHubIdService = async (
 
         return {
             agents: formattedAgents,
+            analytics: {
+                totalAgents: totalHubAgents,
+                activeAgents: activeHubAgents,
+                inactiveAgents: inactiveHubAgents,
+                offDutyAgents: offDutyHubAgents,
+            },
             meta: {
-                totalRecords,
+                totalRecords, // Items matching current active query filter combinations
                 totalPages,
                 currentPage: page,
                 limit,
@@ -277,6 +308,7 @@ export const getAgentByHubIdService = async (
         throw error;
     }
 };
+
 interface UpdateAgentPayload {
     fullName?: string;
     phoneNumber?: string;

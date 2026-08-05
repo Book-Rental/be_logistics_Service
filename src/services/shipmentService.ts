@@ -253,8 +253,8 @@ export const getShipmentByIdService = async (shipmentId: string) => {
 
         // Fetch Shipment
         const shipment: any = await Shipment.findById(shipmentId)
-            .populate("originHubId", "hubName hubCode address")
-            .populate("destinationHubId", "hubName hubCode address")
+            .populate("originHubId", "hubName hubCode address phoneNumber")
+            .populate("destinationHubId", "hubName hubCode address phoneNumber")
             .populate("currentHubId", "hubName hubCode address")
             .populate("currentAgentId", "fullName phoneNumber vehicleType status")
             .lean();
@@ -486,6 +486,14 @@ export const updateShipmentStatusService = async (payload: UpdateShipmentStatusP
                 throw error;
             }
         }
+        if (status == ShipmentStatus.ARRIVED_AT_DESTINATION_HUB) {
+            //here we have to assigen the agent  so that he can deliver the shipment to the customer
+
+        }
+        if (status == ShipmentStatus.DELIVERED) {
+            //Here we have to update the order item status to delivered in the order service
+        }
+
         const normalizedAgentId = agentId
             ? new mongoose.Types.ObjectId(agentId)
             : shipment.currentAgentId;

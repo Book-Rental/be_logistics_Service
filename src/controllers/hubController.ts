@@ -70,7 +70,7 @@ export const getShipmentsByHub = async (req: Request, res: Response) => {
     try {
         const hubId = req.params.hubId as string;
 
-        const shipments = await getShipmentsByHubService(hubId, req.params);
+        const shipments = await getShipmentsByHubService(hubId, req.query);
 
         return successResponse(res, shipments, "Shipments fetched successfully.", StatusCode.OK);
     } catch (error: any) {

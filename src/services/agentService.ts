@@ -212,7 +212,7 @@ export const getAgentByIdServcie = async (agentId: string) => {
 
 export const getAgentByHubIdService = async (
     hubId: string,
-    query: { page?: number; limit?: number } = {}
+    query: { page?: number; limit?: number, status?: AgentStatus } = {}
 ) => {
     try {
         // 1. Fail-fast guard against malformed ObjectId casting exceptions
@@ -225,7 +225,8 @@ export const getAgentByHubIdService = async (
 
         const filter = {
             hubId: new mongoose.Types.ObjectId(hubId),
-            isActive: true
+            isActive: true,
+            ...(query.status ? { status: query.status } : {}),
         };
 
         // 3. Parallelized data fetching and counting matrices execution block

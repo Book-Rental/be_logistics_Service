@@ -78,3 +78,17 @@ export const SHIPMENT_STATUS_TRANSITIONS: Record<
 
     [ShipmentStatus.CANCELLED]: [],
 };
+
+import { randomInt } from "crypto";
+
+export const generateProductionAWB = (): string => {
+  // 1. Get current date structure: YYMMDD (e.g., 260805)
+  const dateStr = new Date().toISOString().slice(2, 10).replace(/-/g, "");
+  
+  // 2. Generate a secure, 6-digit random numeric counter (100000 to 999999)
+  const secureRandomSegment = randomInt(100000, 1000000); 
+  
+  // Output format: AWB-260805-472918 (16 characters total)
+  return `AWB${dateStr}${secureRandomSegment}`;
+};
+

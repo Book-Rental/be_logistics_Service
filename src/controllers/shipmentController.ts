@@ -92,7 +92,7 @@ export const getShipmentByAgentId = async (req: Request, res: Response) => {
         if (!agentId) {
             return failResponse(res, Messages.AGENTID_REQUIRED, StatusCode.Bad_Request);
         }
-        const shipment = await getShipmentByAgentIdService(agentId);
+        const shipment = await getShipmentByAgentIdService(agentId, req.query);
 
         successResponse(res, shipment, Messages.SHIPMENT_FETCHED_SUCCESSFULLY, StatusCode.OK)
 

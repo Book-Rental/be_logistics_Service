@@ -1,4 +1,4 @@
-import { JourneyEventType, PaymentMode, ShipmentStatus, ShipmentType } from "../models/shipment";
+import { JourneyEventType, JourneyType, PaymentMode, ShipmentStatus, ShipmentType } from "../models/shipment";
 import Hub from "../models/hub";
 import Shipment from "../models/shipment";
 import { generateShipmentDetails } from "../utils/shipmentFunction";
@@ -9,7 +9,7 @@ import { StatusCode } from "../utils/StatusCodes";
 import { randomUUID } from "crypto";
 import { buildPaginationQuery } from "../utils/paginationHelper";
 import { getOrderItemDetails } from "../helper/orderHelper";
-import { SHIPMENT_STATUS_TRANSITIONS, UpdateShipmentStatusPayload } from "../utils/shipment";
+import { generateProductionAWB, SHIPMENT_STATUS_TRANSITIONS, UpdateShipmentStatusPayload } from "../utils/shipment";
 interface ContactPayload {
     name: string;
     phone: string;
@@ -42,8 +42,9 @@ export interface CreateShipmentPayload {
     createdBy: string;
 }
 
-export const createShipmentService = async (payload: CreateShipmentPayload) => {
-    // 1. Initialize an atomic execution block channel
+export const createShipmentService = async (
+    payload: CreateShipmentPayload
+) => {
     const session = await mongoose.startSession();
     session.startTransaction();
 
@@ -62,71 +63,96 @@ export const createShipmentService = async (payload: CreateShipmentPayload) => {
             createdBy,
         } = payload;
 
-        // 2. Prevent duplicate shipment checks inside the transaction session
-        const existingShipment = await Shipment.findOne({ orderItemId }).session(session).lean();
+        // Check duplicate shipment
+        const existingShipment = await Shipment.findOne({ orderItemId })
+            .session(session)
+            .lean();
+
         if (existingShipment) {
             throw new Error("Shipment already exists for this order item.");
         }
 
-        // 3. Validate Origin Hub mapping boundaries
+        // Find Origin Hub
         const originHub = await findHubByPincode(sender.pincode);
+
         if (!originHub) {
-            throw new Error(`Origin hub not found for pincode: ${sender.pincode}`);
+            throw new Error(
+                `Origin hub not found for pincode: ${sender.pincode}`
+            );
         }
 
-        // 4. Validate Destination Hub mapping boundaries
+        // Find Destination Hub
         const destinationHub = await findHubByPincode(receiver.pincode);
+
         if (!destinationHub) {
-            throw new Error(`Destination hub not found for pincode: ${receiver.pincode}`);
+            throw new Error(
+                `Destination hub not found for pincode: ${receiver.pincode}`
+            );
         }
 
-        // 5. Generate tracking identifiers
-        const awbNumber = `AWB-${randomUUID()}`;
+        // Generate AWB
+        const awbNumber =  generateProductionAWB();
 
-        // 6. Create the Document using the array structure required for transactions
         const [shipment] = await Shipment.create(
             [
                 {
                     awbNumber,
+
                     orderId,
                     orderItemId,
+
                     sellerId,
                     buyerId,
+
                     sender,
                     receiver,
+
                     shipmentType,
                     paymentMode,
                     codAmount,
+
                     originHubId: originHub._id,
                     destinationHubId: destinationHub._id,
+
                     currentHubId: originHub._id,
+                    currentAgentId: null,
+                    currentTripId: null,
+
                     currentStatus: ShipmentStatus.CREATED,
+
                     expectedDeliveryDate,
-                    createdBy,
+
+                    // History
+                    hubIds: [originHub._id],
+                    agentIds: [],
+
+                    journeyType: JourneyType.PICKUP,
+
                     journeyDetails: [
                         {
                             event: JourneyEventType.SHIPMENT_CREATED,
                             status: ShipmentStatus.CREATED,
                             hubId: originHub._id,
+                            agentId: null,
                             remarks: "Shipment created successfully.",
                             updatedBy: createdBy,
                             eventAt: new Date(),
                         },
                     ],
+
+                    createdBy,
                 },
             ],
-            { session } // 🚀 Links creation process directly to the transaction session
+            { session }
         );
 
-        // 7. If insertion runs successfully, commit the modifications down to your disk storage layer
         await session.commitTransaction();
+
         return shipment;
     } catch (error) {
-        // ❌ Rollback: Instantly roll back and drop changes if any stage throws an exception
         await session.abortTransaction();
         throw error;
     } finally {
-        // Cleanly close network listener channel
         session.endSession();
     }
 };
@@ -165,6 +191,15 @@ export const readyForPickupService = async (orderItemId: string) => {
             // Assign pickup agent
             shipment.pickUpAgentId = pickupAgent._id;
             shipment.currentAgentId = pickupAgent._id;
+
+            // Maintain agent history
+            if (
+                !shipment.agentIds.some(
+                    (id: any) => id.toString() === pickupAgent._id.toString()
+                )
+            ) {
+                shipment.agentIds.push(pickupAgent._id);
+            }
 
             // Update shipment status
             shipment.currentStatus = ShipmentStatus.READY_FOR_PICKUP;
@@ -244,7 +279,7 @@ export const getShipmentByIdService = async (shipmentId: string) => {
         } catch (err) {
             console.error("Failed to fetch order details:", err);
         }
-
+        console.log('shipment', shipment.hubIds)
         return {
             shipmentId: shipment._id,
             awbNumber: shipment.awbNumber,
@@ -270,6 +305,8 @@ export const getShipmentByIdService = async (shipmentId: string) => {
                 destinationHub: shipment.destinationHubId,
                 currentHub: shipment.currentHubId,
             },
+            hubIds: shipment.hubIds,
+            agentIds: shipment.agentIds,
 
             assignedAgent: shipment.currentAgentId,
 
@@ -293,6 +330,7 @@ export const getShipmentByAgentIdService = async (
         page?: number;
         limit?: number;
         currentStatus?: string;
+        JourneyType?: JourneyType;
     } = {}
 ) => {
     try {
@@ -303,7 +341,6 @@ export const getShipmentByAgentIdService = async (
             throw error;
         }
 
-        // Check Agent Exists
         const agent = await Agent.findById(agentId);
 
         if (!agent) {
@@ -322,6 +359,9 @@ export const getShipmentByAgentIdService = async (
 
         if (query.currentStatus) {
             filter.currentStatus = query.currentStatus;
+        }
+        if (query.JourneyType) {
+            filter.journeyType = query.JourneyType;
         }
 
         // Fetch Shipments
@@ -506,7 +546,7 @@ export const getShipmentByOrderItemIdService = async (
             "fullName phoneNumber vehicleType"
         )
         .lean();
-    console.log('ghghg',orderItemId,shipment)
+
     if (!shipment) {
         const error: any = new Error("Shipment not found.");
         error.statusCode = StatusCode.Not_Found;

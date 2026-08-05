@@ -16,9 +16,9 @@ export enum ShipmentStatus {
 
     READY_FOR_PICKUP = "Ready For Pickup",
 
-    OUT_FOR_PICKUP = "Out For Pickup",
-
     PICKUP_ASSIGNED = "Pickup Assigned",
+
+    OUT_FOR_PICKUP = "Out For Pickup",
 
     PICKUP_COMPLETED = "Pickup Completed",
 
@@ -213,7 +213,11 @@ const JourneyDetailSchema = new Schema(
         _id: true,
     }
 );
-
+export enum JourneyType {
+    PICKUP = "Pickup",
+    DELIVERY = "Delivery",
+    RETURN = "Return",
+}
 export interface IShipment extends Document {
     shipmentId: string;
 
@@ -258,6 +262,12 @@ export interface IShipment extends Document {
     createdBy?: Types.ObjectId;
 
     updatedBy?: Types.ObjectId;
+
+    hubIds: Types.ObjectId[];
+
+    journeyType: JourneyType;
+
+    agentIds: Types.ObjectId[];
 }
 
 const ShipmentSchema = new Schema<IShipment>(
@@ -358,6 +368,21 @@ const ShipmentSchema = new Schema<IShipment>(
             default: [],
         },
 
+        hubIds: {
+            type: [Schema.Types.ObjectId],
+            ref: "Hub",
+            default: [],
+        },
+        agentIds: {
+            type: [Schema.Types.ObjectId],
+            ref: "Agent",
+            default: [],
+        },
+        journeyType: {
+            type: String,
+            enum: Object.values(JourneyType),
+            default: JourneyType.PICKUP,
+        },
         createdBy: {
             type: Schema.Types.ObjectId,
             ref: "LogisticsAuth",
@@ -373,22 +398,71 @@ const ShipmentSchema = new Schema<IShipment>(
     }
 );
 
-ShipmentSchema.index({ shipmentId: 1 });
-ShipmentSchema.index({ awbNumber: 1 });
-ShipmentSchema.index({ orderId: 1 });
-ShipmentSchema.index({ orderItemId: 1 });
+// ======================
+// Indexes
+// ======================
 
+// Unique Tracking Number
+ShipmentSchema.index({ awbNumber: 1 }, { unique: true });
+
+// Order
+ShipmentSchema.index({ orderId: 1 });
+ShipmentSchema.index({ orderItemId: 1 }, { unique: true });
+
+// Users
+ShipmentSchema.index({ sellerId: 1 });
+ShipmentSchema.index({ buyerId: 1 });
+
+// Shipment Status
 ShipmentSchema.index({ currentStatus: 1 });
 
+// Hub Queries
+ShipmentSchema.index({ originHubId: 1 });
+ShipmentSchema.index({ destinationHubId: 1 });
 ShipmentSchema.index({ currentHubId: 1 });
+ShipmentSchema.index({ hubIds: 1 });
 
+// Agent Queries
 ShipmentSchema.index({ currentAgentId: 1 });
 
+// Trip Queries
 ShipmentSchema.index({ currentTripId: 1 });
 
+// Common Dashboard Query
 ShipmentSchema.index({
-    originHubId: 1,
-    destinationHubId: 1,
+    currentStatus: 1,
+    currentHubId: 1,
 });
+
+// Pickup Agent Dashboard
+ShipmentSchema.index({
+    currentAgentId: 1,
+    journeyType: 1,
+    currentStatus: 1,
+});
+
+// Delivery Agent Dashboard
+ShipmentSchema.index({
+    currentAgentId: 1,
+    journeyType: 1,
+});
+
+// Shipment Timeline
+ShipmentSchema.index({
+    createdAt: -1,
+});
+
+// Geo Queries (Optional)
+ShipmentSchema.index({
+    "sender.location": "2dsphere",
+});
+
+ShipmentSchema.index({
+    "receiver.location": "2dsphere",
+});
+
+// ======================
+// Export
+// ======================
 
 export default model<IShipment>("Shipment", ShipmentSchema);

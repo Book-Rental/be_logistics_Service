@@ -14,7 +14,7 @@ import Agent, { AgentStatus } from "../models/Agent";
 import { StatusCode } from "../utils/StatusCodes";
 import { randomUUID } from "crypto";
 import { buildPaginationQuery } from "../utils/paginationHelper";
-import { getOrderItemDetails, updateOrderItemStatuse } from "../helper/orderHelper";
+import { getOrderItemDetails, updateOrderItemStatus, } from "../helper/orderHelper";
 import {
     generateProductionAWB,
     SHIPMENT_STATUS_TRANSITIONS,
@@ -467,7 +467,7 @@ export const updateShipmentStatusService = async (payload: UpdateShipmentStatusP
         if (status === ShipmentStatus.PICKUP_COMPLETED) {
             try {
                 // Adjust URL string and body parameters to match your internal Order Service gateway API contract
-                await updateOrderItemStatuse(
+                await updateOrderItemStatus(
                     shipment.orderId.toString(),
                     shipment.orderItemId.toString(),
                     "shipped"

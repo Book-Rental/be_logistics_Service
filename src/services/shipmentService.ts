@@ -8,7 +8,7 @@ import Agent, { AgentStatus } from "../models/Agent";
 import { StatusCode } from "../utils/StatusCodes";
 import { randomUUID } from "crypto";
 import { buildPaginationQuery } from "../utils/paginationHelper";
-import { getOrderItemDetails } from "../helper/orderHelper";
+import { getOrderItemDetails, updateOrderItemStatuse } from "../helper/orderHelper";
 import { generateProductionAWB, SHIPMENT_STATUS_TRANSITIONS, UpdateShipmentStatusPayload } from "../utils/shipment";
 interface ContactPayload {
     name: string;
@@ -91,7 +91,7 @@ export const createShipmentService = async (
         }
 
         // Generate AWB
-        const awbNumber =  generateProductionAWB();
+        const awbNumber = generateProductionAWB();
 
         const [shipment] = await Shipment.create(
             [
@@ -492,7 +492,23 @@ export const updateShipmentStatusService = async (
             error.statusCode = StatusCode.Bad_Request;
             throw error;
         }
+        if (status === ShipmentStatus.PICKUP_COMPLETED) {
+            try {
+                // Adjust URL string and body parameters to match your internal Order Service gateway API contract
+                await updateOrderItemStatuse(
+                    shipment.orderId.toString(),
+                    shipment.orderItemId.toString(),
+                    "shipped"
+                );
+            } catch (apiError: any) {
+                console.error(`Order service synchronization failed for shipment: ${shipmentId}`, apiError.message);
 
+                // Fail-Safe: Block shipment progression if the downstream order table update fails
+                const error: any = new Error("Failed to synchronize shipment state updates with the Order Service.");
+                error.statusCode = StatusCode.Internal_Server_Error;
+                throw error;
+            }
+        }
         const normalizedAgentId = agentId
             ? new mongoose.Types.ObjectId(agentId)
             : shipment.currentAgentId;

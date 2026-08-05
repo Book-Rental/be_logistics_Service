@@ -1,4 +1,10 @@
-import { JourneyEventType, JourneyType, PaymentMode, ShipmentStatus, ShipmentType } from "../models/shipment";
+import {
+    JourneyEventType,
+    JourneyType,
+    PaymentMode,
+    ShipmentStatus,
+    ShipmentType,
+} from "../models/shipment";
 import Hub from "../models/hub";
 import Shipment from "../models/shipment";
 import { generateShipmentDetails } from "../utils/shipmentFunction";
@@ -9,7 +15,11 @@ import { StatusCode } from "../utils/StatusCodes";
 import { randomUUID } from "crypto";
 import { buildPaginationQuery } from "../utils/paginationHelper";
 import { getOrderItemDetails, updateOrderItemStatuse } from "../helper/orderHelper";
-import { generateProductionAWB, SHIPMENT_STATUS_TRANSITIONS, UpdateShipmentStatusPayload } from "../utils/shipment";
+import {
+    generateProductionAWB,
+    SHIPMENT_STATUS_TRANSITIONS,
+    UpdateShipmentStatusPayload,
+} from "../utils/shipment";
 interface ContactPayload {
     name: string;
     phone: string;
@@ -42,9 +52,7 @@ export interface CreateShipmentPayload {
     createdBy: string;
 }
 
-export const createShipmentService = async (
-    payload: CreateShipmentPayload
-) => {
+export const createShipmentService = async (payload: CreateShipmentPayload) => {
     const session = await mongoose.startSession();
     session.startTransaction();
 
@@ -64,9 +72,7 @@ export const createShipmentService = async (
         } = payload;
 
         // Check duplicate shipment
-        const existingShipment = await Shipment.findOne({ orderItemId })
-            .session(session)
-            .lean();
+        const existingShipment = await Shipment.findOne({ orderItemId }).session(session).lean();
 
         if (existingShipment) {
             throw new Error("Shipment already exists for this order item.");
@@ -76,18 +82,14 @@ export const createShipmentService = async (
         const originHub = await findHubByPincode(sender.pincode);
 
         if (!originHub) {
-            throw new Error(
-                `Origin hub not found for pincode: ${sender.pincode}`
-            );
+            throw new Error(`Origin hub not found for pincode: ${sender.pincode}`);
         }
 
         // Find Destination Hub
         const destinationHub = await findHubByPincode(receiver.pincode);
 
         if (!destinationHub) {
-            throw new Error(
-                `Destination hub not found for pincode: ${receiver.pincode}`
-            );
+            throw new Error(`Destination hub not found for pincode: ${receiver.pincode}`);
         }
 
         // Generate AWB
@@ -194,9 +196,7 @@ export const readyForPickupService = async (orderItemId: string) => {
 
             // Maintain agent history
             if (
-                !shipment.agentIds.some(
-                    (id: any) => id.toString() === pickupAgent._id.toString()
-                )
+                !shipment.agentIds.some((id: any) => id.toString() === pickupAgent._id.toString())
             ) {
                 shipment.agentIds.push(pickupAgent._id);
             }
@@ -256,10 +256,7 @@ export const getShipmentByIdService = async (shipmentId: string) => {
             .populate("originHubId", "hubName hubCode address")
             .populate("destinationHubId", "hubName hubCode address")
             .populate("currentHubId", "hubName hubCode address")
-            .populate(
-                "currentAgentId",
-                "fullName phoneNumber vehicleType status"
-            )
+            .populate("currentAgentId", "fullName phoneNumber vehicleType status")
             .lean();
 
         if (!shipment) {
@@ -272,14 +269,11 @@ export const getShipmentByIdService = async (shipmentId: string) => {
         let orderDetails = null;
 
         try {
-            orderDetails = await getOrderItemDetails(
-                shipment.orderId,
-                shipment.orderItemId
-            );
+            orderDetails = await getOrderItemDetails(shipment.orderId, shipment.orderItemId);
         } catch (err) {
             console.error("Failed to fetch order details:", err);
         }
-        console.log('shipment', shipment.hubIds)
+        console.log("shipment", shipment.hubIds);
         return {
             shipmentId: shipment._id,
             awbNumber: shipment.awbNumber,
@@ -322,7 +316,6 @@ export const getShipmentByIdService = async (shipmentId: string) => {
         throw error;
     }
 };
-
 
 export const getShipmentByAgentIdService = async (
     agentId: string,
@@ -389,9 +382,7 @@ export const getShipmentByAgentIdService = async (
                         shipment.orderItemId
                     );
                 } catch (err) {
-                    console.error(
-                        `Failed to fetch order details for shipment ${shipment._id}`
-                    );
+                    console.error(`Failed to fetch order details for shipment ${shipment._id}`);
                 }
 
                 return {
@@ -416,20 +407,9 @@ export const getShipmentByAgentIdService = async (
     }
 };
 
-
-export const updateShipmentStatusService = async (
-    payload: UpdateShipmentStatusPayload
-) => {
+export const updateShipmentStatusService = async (payload: UpdateShipmentStatusPayload) => {
     try {
-        const {
-            shipmentId,
-            status,
-            event,
-            remarks,
-            agentId,
-            hubId,
-            updatedBy,
-        } = payload;
+        const { shipmentId, status, event, remarks, agentId, hubId, updatedBy } = payload;
 
         if (!mongoose.Types.ObjectId.isValid(shipmentId)) {
             const error: any = new Error("Invalid Shipment Id.");
@@ -446,8 +426,7 @@ export const updateShipmentStatusService = async (
         }
 
         // Validate status movement
-        const allowedStatuses =
-            SHIPMENT_STATUS_TRANSITIONS[shipment.currentStatus];
+        const allowedStatuses = SHIPMENT_STATUS_TRANSITIONS[shipment.currentStatus];
 
         if (!allowedStatuses.includes(status)) {
             const error: any = new Error(
@@ -459,21 +438,14 @@ export const updateShipmentStatusService = async (
 
         // Pickup Assignment
         if (status === ShipmentStatus.PICKUP_ASSIGNED && !agentId) {
-            const error: any = new Error(
-                "Pickup Agent Id is required."
-            );
+            const error: any = new Error("Pickup Agent Id is required.");
             error.statusCode = StatusCode.Bad_Request;
             throw error;
         }
 
         // Delivery Assignment
-        if (
-            status === ShipmentStatus.DELIVERY_AGENT_ASSIGNED &&
-            !agentId
-        ) {
-            const error: any = new Error(
-                "Delivery Agent Id is required."
-            );
+        if (status === ShipmentStatus.DELIVERY_AGENT_ASSIGNED && !agentId) {
+            const error: any = new Error("Delivery Agent Id is required.");
             error.statusCode = StatusCode.Bad_Request;
             throw error;
         }
@@ -501,10 +473,15 @@ export const updateShipmentStatusService = async (
                     "shipped"
                 );
             } catch (apiError: any) {
-                console.error(`Order service synchronization failed for shipment: ${shipmentId}`, apiError.message);
+                console.error(
+                    `Order service synchronization failed for shipment: ${shipmentId}`,
+                    apiError.message
+                );
 
                 // Fail-Safe: Block shipment progression if the downstream order table update fails
-                const error: any = new Error("Failed to synchronize shipment state updates with the Order Service.");
+                const error: any = new Error(
+                    "Failed to synchronize shipment state updates with the Order Service."
+                );
                 error.statusCode = StatusCode.Internal_Server_Error;
                 throw error;
             }
@@ -513,9 +490,7 @@ export const updateShipmentStatusService = async (
             ? new mongoose.Types.ObjectId(agentId)
             : shipment.currentAgentId;
 
-        const normalizedHubId = hubId
-            ? new mongoose.Types.ObjectId(hubId)
-            : shipment.currentHubId;
+        const normalizedHubId = hubId ? new mongoose.Types.ObjectId(hubId) : shipment.currentHubId;
 
         shipment.currentStatus = status;
 
@@ -533,9 +508,7 @@ export const updateShipmentStatusService = async (
             hubId: normalizedHubId,
             agentId: normalizedAgentId,
             remarks: remarks || "",
-            updatedBy: updatedBy
-                ? new mongoose.Types.ObjectId(updatedBy)
-                : null,
+            updatedBy: updatedBy ? new mongoose.Types.ObjectId(updatedBy) : null,
             eventAt: new Date(),
         });
 
@@ -547,9 +520,7 @@ export const updateShipmentStatusService = async (
     }
 };
 
-export const getShipmentByOrderItemIdService = async (
-    orderItemId: string
-) => {
+export const getShipmentByOrderItemIdService = async (orderItemId: string) => {
     if (!mongoose.Types.ObjectId.isValid(orderItemId)) {
         const error: any = new Error("Invalid Order Item Id.");
         error.statusCode = StatusCode.Bad_Request;
@@ -557,10 +528,7 @@ export const getShipmentByOrderItemIdService = async (
     }
 
     const shipment = await Shipment.findOne({ orderItemId })
-        .populate(
-            "currentAgentId",
-            "fullName phoneNumber vehicleType"
-        )
+        .populate("currentAgentId", "fullName phoneNumber vehicleType")
         .lean();
 
     if (!shipment) {

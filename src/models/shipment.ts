@@ -83,7 +83,6 @@ export enum JourneyEventType {
     CANCELLED = "Cancelled",
 }
 
-
 const ContactSchema = new Schema(
     {
         name: {

@@ -212,14 +212,14 @@ export const getAgentByIdServcie = async (agentId: string) => {
 
 export const getAgentByHubIdService = async (
     hubId: string,
-    query: { page?: number; limit?: number, status?: AgentStatus } = {}
+    query: { page?: number; limit?: number; status?: AgentStatus } = {}
 ) => {
     try {
         // 1. Fail-fast guard against malformed ObjectId casting exceptions
         if (!mongoose.Types.ObjectId.isValid(hubId)) {
             throw new Error("Invalid Hub ID format string requested");
         }
-        console.log('pages', query.page, query.limit)
+        console.log("pages", query.page, query.limit);
         // 2. Setup uniform pagination boundary data via your helper utility
         const { skip, limit, page } = buildPaginationQuery(query);
 

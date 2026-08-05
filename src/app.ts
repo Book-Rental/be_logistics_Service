@@ -14,7 +14,7 @@ app.use(
             "http://localhost:3000",
             "http://localhost:5173",
             "https://fe-book-rental-host.onrender.com",
-            "https://admin-agent-host.onrender.com"
+            "https://admin-agent-host.onrender.com",
         ],
         credentials: true,
     })

@@ -3,6 +3,7 @@ import { StatusCode } from "../utils/StatusCodes";
 import { successResponse, failResponse, errorResponse } from "../utils/response";
 
 import {
+    assignAgentToShipmentsService,
     createShipmentService,
     getShipmentByAgentIdService,
     getShipmentByIdService,
@@ -135,6 +136,31 @@ export const getShipmentByOrderItemId = async (req: Request, res: Response) => {
         const shipment = await getShipmentByOrderItemIdService(orderItemId);
 
         return successResponse(res, shipment, "Shipment fetched successfully.", StatusCode.OK);
+    } catch (error: any) {
+        return failResponse(
+            res,
+            error.message,
+            error.statusCode || StatusCode.Internal_Server_Error
+        );
+    }
+};
+
+
+export const assignAgentToShipments = async (req: Request, res: Response) => {
+    try {
+        const { shipmentIds, agentId, updatedBy } = req.body;
+
+        if (!shipmentIds || !Array.isArray(shipmentIds) || shipmentIds.length === 0) {
+            return failResponse(res, "shipmentIds must be a non-empty array.", StatusCode.Bad_Request);
+        }
+
+        if (!agentId) {
+            return failResponse(res, "agentId is required.", StatusCode.Bad_Request);
+        }
+
+        const updatedShipments = await assignAgentToShipmentsService({ agentId, shipmentIds, updatedBy });
+
+        return successResponse(res, updatedShipments, "Agent assigned to shipments successfully.", StatusCode.OK);
     } catch (error: any) {
         return failResponse(
             res,

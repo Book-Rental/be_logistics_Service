@@ -4,7 +4,7 @@ import { LogisticsRole } from "../models/LogisticsAuth";
 import { generateHubDetails } from "../utils/generateHubDetails";
 import mongoose from "mongoose";
 import { StatusCode } from "../utils/StatusCodes";
-import shipment from "../models/shipment";
+import shipment, { ShipmentStatus } from "../models/shipment";
 import { buildPaginationQuery } from "../utils/paginationHelper";
 
 interface CreateHubPayload {
@@ -170,6 +170,7 @@ interface GetShipmentsQuery {
     currentStatus?: string;
     search?: string;
     paymentMode?: string;
+    zipCode?: string;
 }
 
 export const getShipmentsByHubService = async (
@@ -193,7 +194,7 @@ export const getShipmentsByHubService = async (
         const limit = Math.max(1, Number(query.limit) || 10);
         const skip = (page - 1) * limit;
 
-        const { currentStatus, search, paymentMode } = query;
+        const { currentStatus, search, paymentMode, zipCode } = query;
 
         // 3. Construct base filter criteria targeting the current hub index
         const matchFilter: any = {
@@ -207,7 +208,9 @@ export const getShipmentsByHubService = async (
         if (paymentMode) {
             matchFilter.paymentMode = paymentMode;
         }
-
+        if (zipCode) {
+            matchFilter["receiver.pincode"] = query.zipCode;
+        }
         // 4. Handle partial text & dynamic partial ObjectID matching
         if (search) {
             const trimmedSearch = search.trim();
@@ -255,7 +258,7 @@ export const getShipmentsByHubService = async (
                 // Populate currentAgentId manually
                 {
                     $lookup: {
-                        from: "users", // ⚠️ Change to "agents" or your exact Agent collection name in MongoDB
+                        from: "agents", // ⚠️ Change to "agents" or your exact Agent collection name in MongoDB
                         localField: "currentAgentId",
                         foreignField: "_id",
                         as: "assignedAgent"
@@ -349,3 +352,96 @@ export const getShipmentsByHubService = async (
     }
 };
 
+
+
+interface GetShipmentsByPincodeQuery {
+    pincode?: string;
+    page?: number;   // Added pagination fields for production safety
+    limit?: number;
+}
+
+export const getShipmentsByReceiverZipCodeService = async (
+    hubId: string,
+    query: GetShipmentsByPincodeQuery = {}
+) => {
+    try {
+        // 1. Guard check for valid structural ObjectID
+        if (!mongoose.Types.ObjectId.isValid(hubId)) {
+            const error: any = new Error("Invalid Hub ID.");
+            error.statusCode = StatusCode.Bad_Request;
+            throw error;
+        }
+
+        // Validate that the hub branch exists
+        const hub = await Hub.findById(hubId).lean();
+        if (!hub) {
+            const error: any = new Error("Hub not found.");
+            error.statusCode = StatusCode.Not_Found;
+            throw error;
+        }
+
+        // 2. Setup standard pagination math defaults
+        const page = Math.max(1, Number(query.page) || 1);
+        const limit = Math.max(1, Number(query.limit) || 10);
+        const skip = (page - 1) * limit;
+
+        // 3. Construct indexing criteria using the correct casing
+        const filter: any = {
+            currentHubId: new mongoose.Types.ObjectId(hubId), 
+            // Explicit cast hit index optimizations
+            currentStatus: ShipmentStatus.ARRIVED_AT_DESTINATION_HUB
+        };
+
+        // Handle structural check on incoming query string parameters
+        if (query.pincode && query.pincode.trim() !== "") {
+            filter["receiver.pincode"] = query.pincode.trim();
+        }
+
+        // 4. Parallel data fetches using capitalized schema class names
+        const [rawShipments, totalRecords] = await Promise.all([
+            shipment.find(filter) // 🚀 Corrected from lower-case 'shipment' to upper-case 'Shipment'
+                .populate("currentAgentId", "fullName phoneNumber")
+                .populate("originHubId", "hubName hubCode")
+                .populate("destinationHubId", "hubName hubCode")
+                .sort({ createdAt: -1 })
+                .skip(skip)
+                .limit(limit)
+                .lean(),
+            shipment.countDocuments(filter)
+        ]);
+
+        const totalPages = Math.ceil(totalRecords / limit) || 1;
+
+        // 5. Structure fields output payload matching requirements
+        const formattedShipments = rawShipments.map((ship: any) => ({
+            shipmentId: ship._id,
+            awbNumber: ship.awbNumber || null,
+            orderId: ship.orderId,
+            orderItemId: ship.orderItemId,
+            shipmentType: ship.shipmentType,
+            journeyType: ship.journeyType,
+            currentStatus: ship.currentStatus,
+            paymentMode: ship.paymentMode,
+            codAmount: ship.codAmount,
+            receiver: ship.receiver || null,
+            originHub: ship.originHubId || null,
+            destinationHub: ship.destinationHubId || null,
+            assignedAgent: ship.currentAgentId || null,
+            expectedDeliveryDate: ship.expectedDeliveryDate,
+            createdAt: ship.createdAt,
+        }));
+
+        return {
+            shipments: formattedShipments,
+            meta: {
+                totalRecords,
+                totalPages,
+                currentPage: page,
+                limit,
+                hasMore: page < totalPages
+            }
+        };
+    } catch (error) {
+        throw error;
+    }
+};

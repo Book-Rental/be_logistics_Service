@@ -488,10 +488,16 @@ export const updateShipmentStatusService = async (payload: UpdateShipmentStatusP
         }
         if (status == ShipmentStatus.ARRIVED_AT_DESTINATION_HUB) {
             //here we have to assigen the agent  so that he can deliver the shipment to the customer
+            if (status === ShipmentStatus.ARRIVED_AT_DESTINATION_HUB) {
+                // Transition the journey state to Delivery for the final-mile legs
+                shipment.journeyType = JourneyType.DELIVERY;
 
+                // Clear the previous middle-mile/pickup agent ID so it can be assigned to a delivery agent
+                shipment.currentAgentId = null;
+            }
         }
         if (status == ShipmentStatus.DELIVERED) {
-            //Here we have to update the order item status to delivered in the order service
+
         }
 
         const normalizedAgentId = agentId
@@ -558,4 +564,126 @@ export const getShipmentByOrderItemIdService = async (orderItemId: string) => {
             eventAt: item.eventAt,
         })),
     };
+};
+
+
+
+export interface AssignDeliveryAgentPayload {
+    agentId: string;
+    shipmentIds: string[];
+    updatedBy: string;
+}
+
+export const assignAgentToShipmentsService = async (
+    payload: AssignDeliveryAgentPayload
+) => {
+    const session = await mongoose.startSession();
+
+    try {
+        const { agentId, shipmentIds, updatedBy } = payload;
+
+
+
+        await session.withTransaction(async () => {
+            // Validate Agent
+            const agent = await Agent.findById(agentId).session(session);
+
+            if (!agent) {
+                const error: any = new Error("Agent not found.");
+                error.statusCode = StatusCode.Not_Found;
+                throw error;
+            }
+
+            if (!agent.isActive || !agent.isAvailable) {
+                const error: any = new Error(
+                    "Selected agent is not available."
+                );
+                error.statusCode = StatusCode.Bad_Request;
+                throw error;
+            }
+
+            for (const shipmentId of shipmentIds) {
+                if (!mongoose.Types.ObjectId.isValid(shipmentId)) {
+                    throw new Error(`Invalid shipment id: ${shipmentId}`);
+                }
+
+                const shipment: any = await Shipment.findById(shipmentId).session(session);
+
+                if (!shipment) {
+                    throw new Error(`Shipment ${shipmentId} not found.`);
+                }
+
+                // Shipment must be in destination hub
+                if (
+                    shipment.currentStatus !==
+                    ShipmentStatus.ARRIVED_AT_DESTINATION_HUB
+                ) {
+                    throw new Error(
+                        `Shipment ${shipment.awbNumber} is not ready for delivery assignment.`
+                    );
+                }
+                // Validate that the delivery agent belongs to the shipment's destination hub
+                if (
+                    shipment.destinationHubId.toString() !== agent.hubId.toString()
+                ) {
+                    throw new Error(
+                        `Delivery agent does not belong to the shipment's destination hub.`
+                    );
+                }
+                // Assign Delivery Agent
+                shipment.currentAgentId = agent._id;
+                shipment.currentStatus =
+                    ShipmentStatus.DELIVERY_AGENT_ASSIGNED;
+                shipment.journeyType = JourneyType.DELIVERY;
+
+                // Maintain Agent History
+                if (
+                    !shipment.agentIds.some(
+                        (id: mongoose.Types.ObjectId) =>
+                            id.toString() === agent._id.toString()
+                    )
+                ) {
+                    shipment.agentIds.push(agent._id);
+                }
+
+                // Maintain Hub History
+                if (
+                    !shipment.hubIds.some(
+                        (id: mongoose.Types.ObjectId) =>
+                            id.toString() === agent.hubId.toString()
+                    )
+                ) {
+                    shipment.hubIds.push(agent.hubId);
+                }
+
+                // Journey Entry
+                shipment.journeyDetails.push({
+                    event: JourneyEventType.DELIVERY_AGENT_ASSIGNED,
+                    status: ShipmentStatus.DELIVERY_AGENT_ASSIGNED,
+                    hubId: shipment.currentHubId,
+                    agentId: agent._id,
+                    remarks: `Assigned to delivery agent ${agent.fullName}`,
+                    updatedBy: new mongoose.Types.ObjectId(updatedBy),
+                    eventAt: new Date(),
+                });
+
+                await shipment.save({ session });
+            }
+
+            // Optional: mark agent unavailable
+            agent.status = AgentStatus.ON_DELIVERY;
+            agent.isAvailable = false;
+            await agent.save({ session });
+        });
+
+        return {
+            success: true,
+            assignedAgentId: agentId,
+            totalAssigned: shipmentIds.length,
+        };
+    } catch (error) {
+        throw error;
+    } finally {
+        session.endSession();
+    }
 };

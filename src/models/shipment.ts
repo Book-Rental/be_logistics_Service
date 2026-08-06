@@ -246,7 +246,7 @@ export interface IShipment extends Document {
 
     currentHubId?: Types.ObjectId;
 
-    currentAgentId?: Types.ObjectId;
+    currentAgentId?: Types.ObjectId | null;
 
     currentTripId?: Types.ObjectId;
 

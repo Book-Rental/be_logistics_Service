@@ -4,6 +4,7 @@ import {
     getAllHubsService,
     getHubByIdService,
     getShipmentsByHubService,
+    getShipmentsByReceiverZipCodeService,
 } from "../services/hubService";
 import { failResponse, successResponse } from "../utils/response";
 import { Messages } from "../utils/constants";
@@ -73,6 +74,43 @@ export const getShipmentsByHub = async (req: Request, res: Response) => {
         const shipments = await getShipmentsByHubService(hubId, req.query);
 
         return successResponse(res, shipments, "Shipments fetched successfully.", StatusCode.OK);
+    } catch (error: any) {
+        return failResponse(
+            res,
+            error.message,
+            error.statusCode || StatusCode.Internal_Server_Error
+        );
+    }
+};
+
+
+export const getShipmentsByReceiverZipCode = async (
+    req: Request,
+    res: Response
+) => {
+    try {
+
+        const hubId = req.params.hubId as string;
+    
+
+        if (!hubId ) {
+            return failResponse(
+                res,
+                "hubId and pincode parameters are required",
+                StatusCode.Bad_Request
+            );
+        }
+        const shipments = await getShipmentsByReceiverZipCodeService(
+            hubId,
+            req.query
+        );
+
+        return successResponse(
+            res,
+            shipments,
+            "Shipments fetched successfully.",
+            StatusCode.OK
+        );
     } catch (error: any) {
         return failResponse(
             res,

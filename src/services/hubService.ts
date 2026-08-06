@@ -161,79 +161,177 @@ export const findHubByPincode = async (pincode: string) => {
     return hub;
 };
 
+
+
+// Interface for type safety (Adjust according to your application structure)
+interface GetShipmentsQuery {
+    page?: number;
+    limit?: number;
+    currentStatus?: string;
+    search?: string;
+    paymentMode?: string;
+}
+
 export const getShipmentsByHubService = async (
     hubId: string,
-    query: { page?: number; limit?: number; currentStatus?: string } = {}
+    query: GetShipmentsQuery = {}
 ) => {
     try {
-        // 1. Fail-fast guard preventing MongoDB document casting format exceptions
+        // 1. Fail-fast guard against malformed MongoDB ObjectIDs
         if (!mongoose.Types.ObjectId.isValid(hubId)) {
-            throw new Error("Invalid Hub ID format string requested");
+            throw Object.assign(new Error("Invalid Hub ID format string requested"), { statusCode: 400 });
         }
 
+        // Validate hub existence to prevent empty response confusion
         const hub = await Hub.findById(hubId).lean();
         if (!hub) {
-            throw new Error("Physical transit hub branch not found");
+            throw Object.assign(new Error("Physical transit hub branch not found"), { statusCode: 404 });
         }
 
-        // 2. Setup standard pagination calculations
-        const { skip, limit, page } = buildPaginationQuery(query);
-        const { currentStatus } = query;
-        console.log(
-            "skip",
-            skip,
-            "limit",
-            limit,
-            "page",
-            page,
-            "currentStatus",
-            query.page,
-            query.limit,
-            query.currentStatus
-        );
-        // 3. Construct direct index filter matching structures
-        const filter: any = {
-            currentHubId: new mongoose.Types.ObjectId(hubId), // 🚀 Explicit conversion ensures index optimization hits
+        // 2. Setup uniform pagination calculations
+        const page = Math.max(1, Number(query.page) || 1);
+        const limit = Math.max(1, Number(query.limit) || 10);
+        const skip = (page - 1) * limit;
+
+        const { currentStatus, search, paymentMode } = query;
+
+        // 3. Construct base filter criteria targeting the current hub index
+        const matchFilter: any = {
+            currentHubId: new mongoose.Types.ObjectId(hubId),
         };
 
-        // Allow filtering shipments by status dynamically inside the Hub queues (e.g., "In Transit", "Reached Hub")
         if (currentStatus) {
-            filter.currentStatus = currentStatus;
+            matchFilter.currentStatus = currentStatus;
         }
 
-        // 4. Parallelize count tracking metrics and record population fetches to drop response latency
-        const [rawShipments, totalRecords] = await Promise.all([
-            shipment
-                .find(filter)
-                .populate("originHubId", "name hubCode city") // Adjust fields based on your Hub schema parameters
-                .populate("destinationHubId", "name hubCode city")
-                .populate("currentAgentId", "fullName phoneNumber status")
-                .sort({ createdAt: -1 })
-                .skip(skip)
-                .limit(limit)
-                .lean(), // 🚀 Drastically cuts down server memory allocations
-            shipment.countDocuments(filter),
+        if (paymentMode) {
+            matchFilter.paymentMode = paymentMode;
+        }
+
+        // 4. Handle partial text & dynamic partial ObjectID matching
+        if (search) {
+            const trimmedSearch = search.trim();
+
+            matchFilter.$expr = {
+                $or: [
+                    // Convert binary ObjectIds to strings on the fly to support partial/fuzzy matches
+                    { $regexMatch: { input: { $toString: "$orderId" }, regex: trimmedSearch, options: "i" } },
+                    { $regexMatch: { input: { $toString: "$orderItemId" }, regex: trimmedSearch, options: "i" } },
+                    // Normal text properties
+                    { $regexMatch: { input: { $ifNull: ["$awbNumber", ""] }, regex: trimmedSearch, options: "i" } },
+                    { $regexMatch: { input: { $ifNull: ["$receiver.name", ""] }, regex: trimmedSearch, options: "i" } },
+                    { $regexMatch: { input: { $ifNull: ["$receiver.city", ""] }, regex: trimmedSearch, options: "i" } }
+                ]
+            };
+        }
+
+        // 5. Execute parallel aggregation pipelines for performant querying and total counting
+        const [rawShipments, totalRecordsData] = await Promise.all([
+            shipment.aggregate([
+                { $match: matchFilter },
+                { $sort: { createdAt: -1 } },
+                { $skip: skip },
+                { $limit: limit },
+                // Populate originHubId manually (replaces .populate())
+                {
+                    $lookup: {
+                        from: "hubs", // ⚠️ Ensure this matches the exact collection name for Hubs in MongoDB
+                        localField: "originHubId",
+                        foreignField: "_id",
+                        as: "originHub"
+                    }
+                },
+                { $unwind: { path: "$originHub", preserveNullAndEmptyArrays: true } },
+                // Populate destinationHubId manually
+                {
+                    $lookup: {
+                        from: "hubs", // ⚠️ Ensure this matches the exact collection name for Hubs in MongoDB
+                        localField: "destinationHubId",
+                        foreignField: "_id",
+                        as: "destinationHub"
+                    }
+                },
+                { $unwind: { path: "$destinationHub", preserveNullAndEmptyArrays: true } },
+                // Populate currentAgentId manually
+                {
+                    $lookup: {
+                        from: "users", // ⚠️ Change to "agents" or your exact Agent collection name in MongoDB
+                        localField: "currentAgentId",
+                        foreignField: "_id",
+                        as: "assignedAgent"
+                    }
+                },
+                { $unwind: { path: "$assignedAgent", preserveNullAndEmptyArrays: true } },
+                // Dynamic clean-up project layer to specify exactly which fields we expose to MFE dashboard
+                {
+                    $project: {
+                        _id: 1,
+                        awbNumber: 1,
+                        orderId: 1,
+                        orderItemId: 1,
+                        shipmentType: 1,
+                        currentStatus: 1,
+                        paymentMode: 1,
+                        codAmount: 1,
+                        expectedDeliveryDate: 1,
+                        createdAt: 1,
+                        receiver: 1,
+                        "originHub._id": 1,
+                        "originHub.name": 1,
+                        "originHub.hubCode": 1,
+                        "originHub.city": 1,
+                        "destinationHub._id": 1,
+                        "destinationHub.name": 1,
+                        "destinationHub.hubCode": 1,
+                        "destinationHub.city": 1,
+                        "assignedAgent._id": 1,
+                        "assignedAgent.fullName": 1,
+                        "assignedAgent.phoneNumber": 1,
+                        "assignedAgent.status": 1,
+                    }
+                }
+            ]),
+            shipment.aggregate([
+                { $match: matchFilter },
+                { $count: "count" }
+            ])
         ]);
 
+        const totalRecords = totalRecordsData[0]?.count || 0;
         const totalPages = Math.ceil(totalRecords / limit) || 1;
 
-        // 5. Clean output structural mapping parameters matching your MFE dashboard specifications
-        const formattedShipments = rawShipments.map((shipment: any) => ({
-            shipmentId: shipment._id,
-            awbNumber: shipment.awbNumber,
-            orderId: shipment.orderId,
-            orderItemId: shipment.orderItemId,
-            shipmentType: shipment.shipmentType,
-            currentStatus: shipment.currentStatus,
-            paymentMode: shipment.paymentMode,
-            codAmount: shipment.codAmount,
-            expectedDeliveryDate: shipment.expectedDeliveryDate,
-            originHub: shipment.originHubId ?? null,
-            destinationHub: shipment.destinationHubId ?? null,
-            assignedAgent: shipment.currentAgentId ?? null,
-            receiverName: shipment.receiver?.name,
-            receiverCity: shipment.receiver?.city,
-            createdAt: shipment.createdAt,
+        // 6. Present data structurally matching your exact specifications
+        const formattedShipments = rawShipments.map((ship: any) => ({
+            shipmentId: ship._id,
+            awbNumber: ship.awbNumber || null,
+            orderId: ship.orderId,
+            orderItemId: ship.orderItemId,
+            shipmentType: ship.shipmentType,
+            currentStatus: ship.currentStatus,
+            paymentMode: ship.paymentMode,
+            codAmount: ship.codAmount,
+            expectedDeliveryDate: ship.expectedDeliveryDate,
+            originHub: ship.originHub ? {
+                _id: ship.originHub._id,
+                name: ship.originHub.name,
+                hubCode: ship.originHub.hubCode,
+                city: ship.originHub.city
+            } : null,
+            destinationHub: ship.destinationHub ? {
+                _id: ship.destinationHub._id,
+                name: ship.destinationHub.name,
+                hubCode: ship.destinationHub.hubCode,
+                city: ship.destinationHub.city
+            } : null,
+            assignedAgent: ship.assignedAgent ? {
+                _id: ship.assignedAgent._id,
+                fullName: ship.assignedAgent.fullName,
+                phoneNumber: ship.assignedAgent.phoneNumber,
+                status: ship.assignedAgent.status
+            } : null,
+            receiverName: ship.receiver?.name ?? null,
+            receiverCity: ship.receiver?.city ?? null,
+            createdAt: ship.createdAt,
         }));
 
         return {
@@ -250,3 +348,4 @@ export const getShipmentsByHubService = async (
         throw error;
     }
 };
+

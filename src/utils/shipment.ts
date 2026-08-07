@@ -11,40 +11,30 @@ export interface UpdateShipmentStatusPayload {
 }
 
 export const SHIPMENT_STATUS_TRANSITIONS: Record<ShipmentStatus, ShipmentStatus[]> = {
-    [ShipmentStatus.CREATED]: [ShipmentStatus.READY_FOR_PICKUP, ShipmentStatus.CANCELLED],
-
-    [ShipmentStatus.READY_FOR_PICKUP]: [ShipmentStatus.PICKUP_ASSIGNED, ShipmentStatus.CANCELLED],
-
-    [ShipmentStatus.PICKUP_ASSIGNED]: [ShipmentStatus.OUT_FOR_PICKUP, ShipmentStatus.CANCELLED],
-
-    [ShipmentStatus.OUT_FOR_PICKUP]: [ShipmentStatus.PICKUP_COMPLETED, ShipmentStatus.CANCELLED],
-
-    [ShipmentStatus.PICKUP_COMPLETED]: [ShipmentStatus.ARRIVED_AT_ORIGIN_HUB],
-
-    [ShipmentStatus.ARRIVED_AT_ORIGIN_HUB]: [ShipmentStatus.SORTING_COMPLETED],
-
-    [ShipmentStatus.SORTING_COMPLETED]: [ShipmentStatus.IN_TRANSIT],
-
-    [ShipmentStatus.IN_TRANSIT]: [ShipmentStatus.ARRIVED_AT_DESTINATION_HUB],
-
-    [ShipmentStatus.ARRIVED_AT_DESTINATION_HUB]: [ShipmentStatus.DELIVERY_AGENT_ASSIGNED],
-
-    [ShipmentStatus.DELIVERY_AGENT_ASSIGNED]: [ShipmentStatus.OUT_FOR_DELIVERY],
-
-    [ShipmentStatus.OUT_FOR_DELIVERY]: [ShipmentStatus.DELIVERED, ShipmentStatus.DELIVERY_FAILED],
-
-    [ShipmentStatus.DELIVERY_FAILED]: [
-        ShipmentStatus.OUT_FOR_DELIVERY,
-        ShipmentStatus.RETURN_INITIATED,
-    ],
-
-    [ShipmentStatus.RETURN_INITIATED]: [ShipmentStatus.RETURNED],
-
-    [ShipmentStatus.RETURNED]: [],
-
-    [ShipmentStatus.DELIVERED]: [],
-
-    [ShipmentStatus.CANCELLED]: [],
+  [ShipmentStatus.CREATED]: [ShipmentStatus.READY_FOR_PICKUP, ShipmentStatus.CANCELLED],
+  [ShipmentStatus.READY_FOR_PICKUP]: [ShipmentStatus.PICKUP_ASSIGNED, ShipmentStatus.CANCELLED],
+  [ShipmentStatus.PICKUP_ASSIGNED]: [ShipmentStatus.OUT_FOR_PICKUP, ShipmentStatus.CANCELLED],
+  [ShipmentStatus.OUT_FOR_PICKUP]: [ShipmentStatus.PICKUP_COMPLETED, ShipmentStatus.CANCELLED],
+  [ShipmentStatus.PICKUP_COMPLETED]: [ShipmentStatus.ARRIVED_AT_ORIGIN_HUB],
+  
+  // Directly bridging Origin Hub to Destination Hub
+  [ShipmentStatus.ARRIVED_AT_ORIGIN_HUB]: [ShipmentStatus.ARRIVED_AT_DESTINATION_HUB], 
+  
+  [ShipmentStatus.ARRIVED_AT_DESTINATION_HUB]: [ShipmentStatus.DELIVERY_AGENT_ASSIGNED],
+  [ShipmentStatus.DELIVERY_AGENT_ASSIGNED]: [ShipmentStatus.OUT_FOR_DELIVERY],
+  [ShipmentStatus.OUT_FOR_DELIVERY]: [ShipmentStatus.DELIVERED, ShipmentStatus.DELIVERY_FAILED],
+  [ShipmentStatus.DELIVERY_FAILED]: [
+    ShipmentStatus.OUT_FOR_DELIVERY,
+    ShipmentStatus.RETURN_INITIATED,
+  ],
+  [ShipmentStatus.RETURN_INITIATED]: [ShipmentStatus.RETURNED],
+  [ShipmentStatus.RETURNED]: [],
+  [ShipmentStatus.DELIVERED]: [],
+  [ShipmentStatus.CANCELLED]: [],
+  
+  // Kept as terminal/empty arrays to safely handle dead code references or legacy records
+  [ShipmentStatus.SORTING_COMPLETED]: [],
+  [ShipmentStatus.IN_TRANSIT]: []
 };
 
 import { randomInt } from "crypto";

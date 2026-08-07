@@ -184,7 +184,12 @@ export const readyForPickupService = async (orderItemId: string) => {
                 isActive: true,
                 isAvailable: true,
                 status: AgentStatus.ACTIVE,
-            }).session(session);
+            })
+                .sort({
+                    activeShipmentsCount: 1, // 🟢 Pick whoever has the least work first (Fair Share)
+                    updatedAt: 1             // 🟢 If tied, pick whoever was updated longest ago (Round Robin)
+                })
+                .session(session);
 
             if (!pickupAgent) {
                 throw new Error("No pickup agent available for this hub.");

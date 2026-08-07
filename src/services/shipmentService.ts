@@ -676,8 +676,8 @@ export const assignAgentToShipmentsService = async (
             }
 
             // Optional: mark agent unavailable
-            agent.status = AgentStatus.ON_DELIVERY;
-            agent.isAvailable = false;
+            // agent.status = AgentStatus.ON_DELIVERY;
+            // agent.isAvailable = false;
             await agent.save({ session });
         });
 

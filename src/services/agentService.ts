@@ -322,6 +322,7 @@ interface UpdateAgentPayload {
     hubId?: string;
     isActive?: boolean;
     updatedBy?: string;
+    isAvailable?: boolean;
 }
 
 export const updateAgentService = async (agentId: string, payload: UpdateAgentPayload) => {
@@ -373,6 +374,7 @@ export const updateAgentService = async (agentId: string, payload: UpdateAgentPa
                 "status",
                 "hubId",
                 "isActive",
+                "isAvailable"
             ];
 
             for (const field of allowedFields) {

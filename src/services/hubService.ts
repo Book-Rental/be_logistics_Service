@@ -4,7 +4,7 @@ import { LogisticsRole } from "../models/LogisticsAuth";
 import { generateHubDetails } from "../utils/generateHubDetails";
 import mongoose from "mongoose";
 import { StatusCode } from "../utils/StatusCodes";
-import shipment, { ShipmentStatus } from "../models/shipment";
+import shipment, { JourneyType, ShipmentStatus } from "../models/shipment";
 import { buildPaginationQuery } from "../utils/paginationHelper";
 
 interface CreateHubPayload {
@@ -163,14 +163,14 @@ export const findHubByPincode = async (pincode: string) => {
 
 
 
-// Interface for type safety (Adjust according to your application structure)
+
 interface GetShipmentsQuery {
     page?: number;
     limit?: number;
     currentStatus?: string;
     search?: string;
     paymentMode?: string;
-    zipCode?: string;
+    journeyType?: JourneyType; // Fixed: Kept optional to match interface strategy
 }
 
 export const getShipmentsByHubService = async (
@@ -194,7 +194,7 @@ export const getShipmentsByHubService = async (
         const limit = Math.max(1, Number(query.limit) || 10);
         const skip = (page - 1) * limit;
 
-        const { currentStatus, search, paymentMode, zipCode } = query;
+        const { currentStatus, search, paymentMode, journeyType } = query;
 
         // 3. Construct base filter criteria targeting the current hub index
         const matchFilter: any = {
@@ -208,102 +208,111 @@ export const getShipmentsByHubService = async (
         if (paymentMode) {
             matchFilter.paymentMode = paymentMode;
         }
-        if (zipCode) {
-            matchFilter["receiver.pincode"] = query.zipCode;
+
+        // Fixed: Added mapping for journeyType filter
+        if (journeyType) {
+            matchFilter.journeyType = journeyType;
         }
-        // 4. Handle partial text & dynamic partial ObjectID matching
+       
+        // 4. Handle text searches efficiently
         if (search) {
             const trimmedSearch = search.trim();
+            const searchConditions: any[] = [
+                { awbNumber: { $regex: trimmedSearch, $options: "i" } },
+                { "receiver.name": { $regex: trimmedSearch, $options: "i" } },
+                { "receiver.city": { $regex: trimmedSearch, $options: "i" } }
+            ];
 
-            matchFilter.$expr = {
-                $or: [
-                    // Convert binary ObjectIds to strings on the fly to support partial/fuzzy matches
-                    { $regexMatch: { input: { $toString: "$orderId" }, regex: trimmedSearch, options: "i" } },
-                    { $regexMatch: { input: { $toString: "$orderItemId" }, regex: trimmedSearch, options: "i" } },
-                    // Normal text properties
-                    { $regexMatch: { input: { $ifNull: ["$awbNumber", ""] }, regex: trimmedSearch, options: "i" } },
-                    { $regexMatch: { input: { $ifNull: ["$receiver.name", ""] }, regex: trimmedSearch, options: "i" } },
-                    { $regexMatch: { input: { $ifNull: ["$receiver.city", ""] }, regex: trimmedSearch, options: "i" } }
-                ]
-            };
+            // Avoid heavy $toString scans: parse search term directly if it's a valid hex string
+            if (mongoose.Types.ObjectId.isValid(trimmedSearch)) {
+                const searchObjectId = new mongoose.Types.ObjectId(trimmedSearch);
+                searchConditions.push({ orderId: searchObjectId });
+                searchConditions.push({ orderItemId: searchObjectId });
+            }
+
+            matchFilter.$or = searchConditions;
         }
 
-        // 5. Execute parallel aggregation pipelines for performant querying and total counting
-        const [rawShipments, totalRecordsData] = await Promise.all([
-            shipment.aggregate([
-                { $match: matchFilter },
-                { $sort: { createdAt: -1 } },
-                { $skip: skip },
-                { $limit: limit },
-                // Populate originHubId manually (replaces .populate())
-                {
-                    $lookup: {
-                        from: "hubs", // ⚠️ Ensure this matches the exact collection name for Hubs in MongoDB
-                        localField: "originHubId",
-                        foreignField: "_id",
-                        as: "originHub"
-                    }
-                },
-                { $unwind: { path: "$originHub", preserveNullAndEmptyArrays: true } },
-                // Populate destinationHubId manually
-                {
-                    $lookup: {
-                        from: "hubs", // ⚠️ Ensure this matches the exact collection name for Hubs in MongoDB
-                        localField: "destinationHubId",
-                        foreignField: "_id",
-                        as: "destinationHub"
-                    }
-                },
-                { $unwind: { path: "$destinationHub", preserveNullAndEmptyArrays: true } },
-                // Populate currentAgentId manually
-                {
-                    $lookup: {
-                        from: "agents", // ⚠️ Change to "agents" or your exact Agent collection name in MongoDB
-                        localField: "currentAgentId",
-                        foreignField: "_id",
-                        as: "assignedAgent"
-                    }
-                },
-                { $unwind: { path: "$assignedAgent", preserveNullAndEmptyArrays: true } },
-                // Dynamic clean-up project layer to specify exactly which fields we expose to MFE dashboard
-                {
-                    $project: {
-                        _id: 1,
-                        awbNumber: 1,
-                        orderId: 1,
-                        orderItemId: 1,
-                        shipmentType: 1,
-                        currentStatus: 1,
-                        paymentMode: 1,
-                        codAmount: 1,
-                        expectedDeliveryDate: 1,
-                        createdAt: 1,
-                        receiver: 1,
-                        "originHub._id": 1,
-                        "originHub.name": 1,
-                        "originHub.hubCode": 1,
-                        "originHub.city": 1,
-                        "destinationHub._id": 1,
-                        "destinationHub.name": 1,
-                        "destinationHub.hubCode": 1,
-                        "destinationHub.city": 1,
-                        "assignedAgent._id": 1,
-                        "assignedAgent.fullName": 1,
-                        "assignedAgent.phoneNumber": 1,
-                        "assignedAgent.status": 1,
-                    }
+        // 5. Execute unified single-pass aggregation pipeline using $facet
+        const [facetResult] = await shipment.aggregate([
+            { $match: matchFilter },
+            {
+                $facet: {
+                    metadata: [{ $count: "totalRecords" }],
+                    data: [
+                        { $sort: { createdAt: -1 } },
+                        { $skip: skip },
+                        { $limit: limit },
+                        // Populate originHubId manually
+                        {
+                            $lookup: {
+                                from: "hubs", // Ensure this matches collection name exactly
+                                localField: "originHubId",
+                                foreignField: "_id",
+                                as: "originHub"
+                            }
+                        },
+                        { $unwind: { path: "$originHub", preserveNullAndEmptyArrays: true } },
+                        // Populate destinationHubId manually
+                        {
+                            $lookup: {
+                                from: "hubs",
+                                localField: "destinationHubId",
+                                foreignField: "_id",
+                                as: "destinationHub"
+                            }
+                        },
+                        { $unwind: { path: "$destinationHub", preserveNullAndEmptyArrays: true } },
+                        // Populate currentAgentId manually
+                        {
+                            $lookup: {
+                                from: "agents", // Ensure this matches collection name exactly
+                                localField: "currentAgentId",
+                                foreignField: "_id",
+                                as: "assignedAgent"
+                            }
+                        },
+                        { $unwind: { path: "$assignedAgent", preserveNullAndEmptyArrays: true } },
+                        // Output layer filtering out payload fields
+                        {
+                            $project: {
+                                _id: 1,
+                                awbNumber: 1,
+                                orderId: 1,
+                                orderItemId: 1,
+                                shipmentType: 1,
+                                currentStatus: 1,
+                                paymentMode: 1,
+                                codAmount: 1,
+                                expectedDeliveryDate: 1,
+                                createdAt: 1,
+                                receiver: 1,
+                                journeyType: 1,
+                                "originHub._id": 1,
+                                "originHub.name": 1,
+                                "originHub.hubCode": 1,
+                                "originHub.city": 1,
+                                "destinationHub._id": 1,
+                                "destinationHub.name": 1,
+                                "destinationHub.hubCode": 1,
+                                "destinationHub.city": 1,
+                                "assignedAgent._id": 1,
+                                "assignedAgent.fullName": 1,
+                                "assignedAgent.phoneNumber": 1,
+                                "assignedAgent.status": 1,
+                            }
+                        }
+                    ]
                 }
-            ]),
-            shipment.aggregate([
-                { $match: matchFilter },
-                { $count: "count" }
-            ])
+            }
         ]);
 
-        const totalRecords = totalRecordsData[0]?.count || 0;
+        // Extract numbers safely out of facet response structural wrapper
+        const totalRecords = facetResult?.metadata[0]?.totalRecords || 0;
         const totalPages = Math.ceil(totalRecords / limit) || 1;
+        const rawShipments = facetResult?.data || [];
 
-        // 6. Present data structurally matching your exact specifications
+        // 6. Map raw records to clean API response schema
         const formattedShipments = rawShipments.map((ship: any) => ({
             shipmentId: ship._id,
             awbNumber: ship.awbNumber || null,
@@ -314,6 +323,7 @@ export const getShipmentsByHubService = async (
             paymentMode: ship.paymentMode,
             codAmount: ship.codAmount,
             expectedDeliveryDate: ship.expectedDeliveryDate,
+            journeyType: ship.journeyType || null,
             originHub: ship.originHub ? {
                 _id: ship.originHub._id,
                 name: ship.originHub.name,
@@ -354,10 +364,12 @@ export const getShipmentsByHubService = async (
 
 
 
+
 interface GetShipmentsByPincodeQuery {
     pincode?: string;
     page?: number;   // Added pagination fields for production safety
     limit?: number;
+    journeyType?: JourneyType; // Optional filter for journey type
 }
 
 export const getShipmentsByReceiverZipCodeService = async (

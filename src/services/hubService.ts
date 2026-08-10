@@ -213,7 +213,7 @@ export const getShipmentsByHubService = async (
         if (journeyType) {
             matchFilter.journeyType = journeyType;
         }
-       
+
         // 4. Handle text searches efficiently
         if (search) {
             const trimmedSearch = search.trim();
@@ -399,7 +399,7 @@ export const getShipmentsByReceiverZipCodeService = async (
 
         // 3. Construct indexing criteria using the correct casing
         const filter: any = {
-            currentHubId: new mongoose.Types.ObjectId(hubId), 
+            currentHubId: new mongoose.Types.ObjectId(hubId),
             // Explicit cast hit index optimizations
             currentStatus: ShipmentStatus.ARRIVED_AT_DESTINATION_HUB
         };
@@ -457,3 +457,21 @@ export const getShipmentsByReceiverZipCodeService = async (
         throw error;
     }
 };
+
+
+export const checkHubServiceabilityService = async (pincode: string) => {
+    try {
+        if (!pincode || pincode.trim() === "") {
+            throw new Error("Pincode is required for serviceability check.");
+        }
+
+        const hub = await Hub.findOne({
+            serviceablePincodes: pincode.trim(),
+            status: HubStatus.ACTIVE
+        });
+
+        return !!hub; // Returns true if a hub is found, false otherwise
+    } catch (error) {
+        throw error;
+    }
+}

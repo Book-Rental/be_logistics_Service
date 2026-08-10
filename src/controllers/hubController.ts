@@ -1,5 +1,6 @@
 import { Request, Response } from "express";
 import {
+    checkHubServiceabilityService,
     createHubService,
     getAllHubsService,
     getHubByIdService,
@@ -91,9 +92,9 @@ export const getShipmentsByReceiverZipCode = async (
     try {
 
         const hubId = req.params.hubId as string;
-    
 
-        if (!hubId ) {
+
+        if (!hubId) {
             return failResponse(
                 res,
                 "hubId and pincode parameters are required",
@@ -119,3 +120,21 @@ export const getShipmentsByReceiverZipCode = async (
         );
     }
 };
+
+
+export const checkHubServiceability = async (req: Request, res: Response) => {
+    try {
+        const { pincode } = req.query;
+        console.log("pincode", req.query);
+        if (!pincode) {
+            failResponse(res, "hubId and pincode query parameters are required", StatusCode.Bad_Request);
+            return;
+        }
+
+        const isServiceable = await checkHubServiceabilityService(pincode as string);
+
+        successResponse(res, { isServiceable }, "Serviceability checked successfully.", StatusCode.OK);
+    } catch (error: any) {
+        failResponse(res, error.message || "Failed to check serviceability", StatusCode.Internal_Server_Error);
+    }
+}

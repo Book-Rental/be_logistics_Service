@@ -469,6 +469,50 @@ export const updateShipmentStatusService = async (payload: UpdateShipmentStatusP
             error.statusCode = StatusCode.Bad_Request;
             throw error;
         }
+        if (status === ShipmentStatus.ARRIVED_AT_ORIGIN_HUB) {
+            if (!shipment.originHubId) {
+                const error: any = new Error(
+                    "Origin Hub Id is required."
+                );
+                error.statusCode = StatusCode.Bad_Request;
+                throw error;
+            }
+
+            // Shipment has reached the origin hub
+            shipment.currentHubId = shipment.originHubId;
+            const isSameHub =
+                shipment.originHubId.toString() ===
+                shipment.destinationHubId.toString();
+            // Check whether this hub is also the destination hub
+            if (
+                isSameHub
+            ) {
+                // No middle-mile movement is required.
+                // Directly move shipment to destination hub state.
+                shipment.currentStatus =
+                    ShipmentStatus.ARRIVED_AT_DESTINATION_HUB;
+
+                shipment.journeyType = JourneyType.DELIVERY;
+
+                // No longer assigned to the pickup/middle-mile agent
+                shipment.currentAgentId = null;
+
+                // Add the automatically generated destination arrival event
+                shipment.journeyDetails.push({
+                    event: "Shipment directly reached destination hub",
+                    status: ShipmentStatus.ARRIVED_AT_DESTINATION_HUB,
+                    hubId: shipment.destinationHubId,
+                    agentId: null,
+                    remarks:
+                        "Origin hub and destination hub are the same. Shipment moved directly to destination hub status.",
+                    updatedBy: shipment.originHubId,
+                    eventAt: new Date(),
+                });
+            } else {
+                // Normal flow continues from origin hub
+                shipment.currentStatus = ShipmentStatus.ARRIVED_AT_ORIGIN_HUB;
+            }
+        }
         if (status === ShipmentStatus.PICKUP_COMPLETED) {
             try {
                 // Adjust URL string and body parameters to match your internal Order Service gateway API contract
@@ -501,8 +545,49 @@ export const updateShipmentStatusService = async (payload: UpdateShipmentStatusP
                 shipment.currentAgentId = null;
             }
         }
-        if (status == ShipmentStatus.DELIVERED) {
+        if (status == ShipmentStatus.OUT_FOR_DELIVERY) {
+            try {
+                // Adjust URL string and body parameters to match your internal Order Service gateway API contract
+                await updateOrderItemStatus(
+                    shipment.orderId.toString(),
+                    shipment.orderItemId.toString(),
+                    "out_for_delivery"
+                );
+            } catch (apiError: any) {
+                console.error(
+                    `Order service synchronization failed for shipment: ${shipmentId}`,
+                    apiError.message
+                );
 
+                // Fail-Safe: Block shipment progression if the downstream order table update fails
+                const error: any = new Error(
+                    "Failed to synchronize shipment state updates with the Order Service."
+                );
+                error.statusCode = StatusCode.Internal_Server_Error;
+                throw error;
+            }
+        }
+        if (status == ShipmentStatus.DELIVERED) {
+            try {
+                // Adjust URL string and body parameters to match your internal Order Service gateway API contract
+                await updateOrderItemStatus(
+                    shipment.orderId.toString(),
+                    shipment.orderItemId.toString(),
+                    "delivered"
+                );
+            } catch (apiError: any) {
+                console.error(
+                    `Order service synchronization failed for shipment: ${shipmentId}`,
+                    apiError.message
+                );
+
+                // Fail-Safe: Block shipment progression if the downstream order table update fails
+                const error: any = new Error(
+                    "Failed to synchronize shipment state updates with the Order Service."
+                );
+                error.statusCode = StatusCode.Internal_Server_Error;
+                throw error;
+            }
         }
 
         const normalizedAgentId = agentId

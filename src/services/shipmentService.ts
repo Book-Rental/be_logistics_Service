@@ -350,7 +350,7 @@ export const getShipmentByAgentIdService = async (
         // Pagination
         const { skip, limit, page } = buildPaginationQuery(query);
 
-        // Filter
+        // Filter for Paginated Results
         const filter: any = {
             currentAgentId: agent._id,
         };
@@ -362,8 +362,16 @@ export const getShipmentByAgentIdService = async (
             filter.journeyType = query.JourneyType;
         }
 
-        // Fetch Shipments
-        const [shipments, totalRecords] = await Promise.all([
+        // Base filter for counts (ignores status filter to get totals across all states)
+        const countFilter: any = {
+            currentAgentId: agent._id,
+        };
+        if (query.JourneyType) {
+            countFilter.journeyType = query.JourneyType;
+        }
+
+        // Fetch Shipments, Total Records, and Status Aggregations in parallel
+        const [shipments, totalFilteredRecords, statusCountsRaw] = await Promise.all([
             Shipment.find(filter)
                 .populate("originHubId", "hubName hubCode")
                 .populate("destinationHubId", "hubName hubCode")
@@ -374,7 +382,23 @@ export const getShipmentByAgentIdService = async (
                 .lean(),
 
             Shipment.countDocuments(filter),
+
+            Shipment.aggregate([
+                { $match: countFilter },
+                { $group: { _id: "$currentStatus", count: { $sum: 1 } } }
+            ])
         ]);
+
+        // Transform Aggregation Array into Key-Value Map and calculate Overall Total
+        let totalCount = 0;
+        const statusWiseCounts: Record<string, number> = {};
+
+        statusCountsRaw.forEach((item) => {
+            if (item._id) {
+                statusWiseCounts[item._id] = item.count;
+                totalCount += item.count; // Accumulate grand total across all states
+            }
+        });
 
         // Append Order Details
         const shipmentData = await Promise.all(
@@ -399,18 +423,23 @@ export const getShipmentByAgentIdService = async (
 
         return {
             shipments: shipmentData,
+            counts: {
+                totalCount,         // Grand overall total of data matching JourneyType
+                ...statusWiseCounts // Dynamic mapping like {"Pickup Assigned": 8, "Out For Pickup": 5}
+            },
             meta: {
-                totalRecords,
-                totalPages: Math.ceil(totalRecords / limit),
+                totalRecords: totalFilteredRecords, // Total records matching the status filter
+                totalPages: Math.ceil(totalFilteredRecords / limit),
                 currentPage: page,
                 limit,
-                hasMore: page < Math.ceil(totalRecords / limit),
+                hasMore: page < Math.ceil(totalFilteredRecords / limit),
             },
         };
     } catch (error) {
         throw error;
     }
 };
+
 
 export const updateShipmentStatusService = async (payload: UpdateShipmentStatusPayload) => {
     try {

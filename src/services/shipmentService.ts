@@ -14,7 +14,7 @@ import Agent, { AgentStatus } from "../models/Agent";
 import { StatusCode } from "../utils/StatusCodes";
 import { randomUUID } from "crypto";
 import { buildPaginationQuery } from "../utils/paginationHelper";
-import { getOrderItemDetails, updateOrderItemStatus, } from "../helper/orderHelper";
+import { getOrderItemDetails, updateOrderItemStatus } from "../helper/orderHelper";
 import {
     generateProductionAWB,
     SHIPMENT_STATUS_TRANSITIONS,
@@ -187,7 +187,7 @@ export const readyForPickupService = async (orderItemId: string) => {
             })
                 .sort({
                     activeShipmentsCount: 1, // 🟢 Pick whoever has the least work first (Fair Share)
-                    updatedAt: 1             // 🟢 If tied, pick whoever was updated longest ago (Round Robin)
+                    updatedAt: 1, // 🟢 If tied, pick whoever was updated longest ago (Round Robin)
                 })
                 .session(session);
 
@@ -385,8 +385,8 @@ export const getShipmentByAgentIdService = async (
 
             Shipment.aggregate([
                 { $match: countFilter },
-                { $group: { _id: "$currentStatus", count: { $sum: 1 } } }
-            ])
+                { $group: { _id: "$currentStatus", count: { $sum: 1 } } },
+            ]),
         ]);
 
         // Transform Aggregation Array into Key-Value Map and calculate Overall Total
@@ -424,8 +424,8 @@ export const getShipmentByAgentIdService = async (
         return {
             shipments: shipmentData,
             counts: {
-                totalCount,         // Grand overall total of data matching JourneyType
-                ...statusWiseCounts // Dynamic mapping like {"Pickup Assigned": 8, "Out For Pickup": 5}
+                totalCount, // Grand overall total of data matching JourneyType
+                ...statusWiseCounts, // Dynamic mapping like {"Pickup Assigned": 8, "Out For Pickup": 5}
             },
             meta: {
                 totalRecords: totalFilteredRecords, // Total records matching the status filter
@@ -440,19 +440,9 @@ export const getShipmentByAgentIdService = async (
     }
 };
 
-export const updateShipmentStatusService = async (
-    payload: UpdateShipmentStatusPayload
-) => {
+export const updateShipmentStatusService = async (payload: UpdateShipmentStatusPayload) => {
     try {
-        const {
-            shipmentId,
-            status,
-            event,
-            remarks,
-            agentId,
-            hubId,
-            updatedBy,
-        } = payload;
+        const { shipmentId, status, event, remarks, agentId, hubId, updatedBy } = payload;
 
         // =====================================================
         // 1. Validate Shipment ID
@@ -480,8 +470,7 @@ export const updateShipmentStatusService = async (
         // 3. Validate Requested Status Transition
         // =====================================================
 
-        const allowedStatuses =
-            SHIPMENT_STATUS_TRANSITIONS[shipment.currentStatus];
+        const allowedStatuses = SHIPMENT_STATUS_TRANSITIONS[shipment.currentStatus];
 
         if (!allowedStatuses?.includes(status)) {
             const error: any = new Error(
@@ -496,25 +485,15 @@ export const updateShipmentStatusService = async (
         // 4. Validate Agent
         // =====================================================
 
-        if (
-            status === ShipmentStatus.PICKUP_ASSIGNED &&
-            !agentId
-        ) {
-            const error: any = new Error(
-                "Pickup Agent Id is required."
-            );
+        if (status === ShipmentStatus.PICKUP_ASSIGNED && !agentId) {
+            const error: any = new Error("Pickup Agent Id is required.");
 
             error.statusCode = StatusCode.Bad_Request;
             throw error;
         }
 
-        if (
-            status === ShipmentStatus.DELIVERY_AGENT_ASSIGNED &&
-            !agentId
-        ) {
-            const error: any = new Error(
-                "Delivery Agent Id is required."
-            );
+        if (status === ShipmentStatus.DELIVERY_AGENT_ASSIGNED && !agentId) {
+            const error: any = new Error("Delivery Agent Id is required.");
 
             error.statusCode = StatusCode.Bad_Request;
             throw error;
@@ -524,9 +503,7 @@ export const updateShipmentStatusService = async (
         // 7. PICKUP Assigened - Update Order Service
         // =====================================================
 
-        if (
-            status === ShipmentStatus.PICKUP_ASSIGNED
-        ) {
+        if (status === ShipmentStatus.PICKUP_ASSIGNED) {
             try {
                 await updateOrderItemStatus(
                     shipment.orderId.toString(),
@@ -543,8 +520,7 @@ export const updateShipmentStatusService = async (
                     "Failed to synchronize shipment state updates with the Order Service."
                 );
 
-                error.statusCode =
-                    StatusCode.Internal_Server_Error;
+                error.statusCode = StatusCode.Internal_Server_Error;
 
                 throw error;
             }
@@ -562,9 +538,7 @@ export const updateShipmentStatusService = async (
             ].includes(status) &&
             !hubId
         ) {
-            const error: any = new Error(
-                "Hub Id is required."
-            );
+            const error: any = new Error("Hub Id is required.");
 
             error.statusCode = StatusCode.Bad_Request;
             throw error;
@@ -576,35 +550,27 @@ export const updateShipmentStatusService = async (
 
         const normalizedAgentId = agentId
             ? new mongoose.Types.ObjectId(agentId)
-            : shipment.currentAgentId ?? undefined;
+            : (shipment.currentAgentId ?? undefined);
 
         const normalizedHubId = hubId
             ? new mongoose.Types.ObjectId(hubId)
-            : shipment.currentHubId ?? undefined;
+            : (shipment.currentHubId ?? undefined);
 
-        const normalizedUpdatedBy =
-            new mongoose.Types.ObjectId(updatedBy);
-
-
+        const normalizedUpdatedBy = new mongoose.Types.ObjectId(updatedBy);
 
         // =====================================================
         // 8. ARRIVED AT ORIGIN HUB
         // =====================================================
 
-        if (
-            status === ShipmentStatus.ARRIVED_AT_ORIGIN_HUB
-        ) {
+        if (status === ShipmentStatus.ARRIVED_AT_ORIGIN_HUB) {
             // -------------------------------------------------
             // Validate origin hub
             // -------------------------------------------------
 
             if (!shipment.originHubId) {
-                const error: any = new Error(
-                    "Origin Hub Id is missing in shipment."
-                );
+                const error: any = new Error("Origin Hub Id is missing in shipment.");
 
-                error.statusCode =
-                    StatusCode.Bad_Request;
+                error.statusCode = StatusCode.Bad_Request;
 
                 throw error;
             }
@@ -614,12 +580,9 @@ export const updateShipmentStatusService = async (
             // -------------------------------------------------
 
             if (!shipment.destinationHubId) {
-                const error: any = new Error(
-                    "Destination Hub Id is missing in shipment."
-                );
+                const error: any = new Error("Destination Hub Id is missing in shipment.");
 
-                error.statusCode =
-                    StatusCode.Bad_Request;
+                error.statusCode = StatusCode.Bad_Request;
 
                 throw error;
             }
@@ -629,38 +592,28 @@ export const updateShipmentStatusService = async (
             // Always update to ARRIVED_AT_ORIGIN_HUB
             // -------------------------------------------------
 
-            shipment.currentStatus =
-                ShipmentStatus.ARRIVED_AT_ORIGIN_HUB;
+            shipment.currentStatus = ShipmentStatus.ARRIVED_AT_ORIGIN_HUB;
 
-            shipment.currentHubId =
-                shipment.originHubId;
+            shipment.currentHubId = shipment.originHubId;
 
-            shipment.currentAgentId =
-                normalizedAgentId;
+            shipment.currentAgentId = normalizedAgentId;
 
             // -------------------------------------------------
             // Add origin hub journey
             // -------------------------------------------------
 
             shipment.journeyDetails.push({
-                event:
-                    event ||
-                    "Shipment arrived at origin hub",
+                event: event || "Shipment arrived at origin hub",
 
-                status:
-                    ShipmentStatus.ARRIVED_AT_ORIGIN_HUB,
+                status: ShipmentStatus.ARRIVED_AT_ORIGIN_HUB,
 
-                hubId:
-                    shipment.originHubId,
+                hubId: shipment.originHubId,
 
-                agentId:
-                    normalizedAgentId,
+                agentId: normalizedAgentId,
 
-                remarks:
-                    remarks || "",
+                remarks: remarks || "",
 
-                updatedBy:
-                    normalizedUpdatedBy,
+                updatedBy: normalizedUpdatedBy,
 
                 eventAt: new Date(),
             });
@@ -670,8 +623,7 @@ export const updateShipmentStatusService = async (
             // -------------------------------------------------
 
             const isSameHub =
-                shipment.originHubId.toString() ===
-                shipment.destinationHubId.toString();
+                shipment.originHubId.toString() === shipment.destinationHubId.toString();
 
             // -------------------------------------------------
             // DIFFERENT HUB
@@ -697,38 +649,31 @@ export const updateShipmentStatusService = async (
             //
             // =================================================
 
-            shipment.currentStatus =
-                ShipmentStatus.ARRIVED_AT_DESTINATION_HUB;
+            shipment.currentStatus = ShipmentStatus.ARRIVED_AT_DESTINATION_HUB;
 
-            shipment.currentHubId =
-                shipment.destinationHubId;
+            shipment.currentHubId = shipment.destinationHubId;
 
             shipment.currentAgentId = null;
 
-            shipment.journeyType =
-                JourneyType.DELIVERY;
+            shipment.journeyType = JourneyType.DELIVERY;
 
             // -------------------------------------------------
             // Add destination hub journey
             // -------------------------------------------------
 
             shipment.journeyDetails.push({
-                event:
-                    "Arrived At Hub",
+                event: "Arrived At Hub",
 
-                status:
-                    ShipmentStatus.ARRIVED_AT_DESTINATION_HUB,
+                status: ShipmentStatus.ARRIVED_AT_DESTINATION_HUB,
 
-                hubId:
-                    shipment.destinationHubId,
+                hubId: shipment.destinationHubId,
 
                 agentId: null,
 
                 remarks:
                     "Origin hub and destination hub are the same. Shipment automatically moved to destination hub.",
 
-                updatedBy:
-                    normalizedUpdatedBy,
+                updatedBy: normalizedUpdatedBy,
 
                 eventAt: new Date(),
             });
@@ -742,39 +687,25 @@ export const updateShipmentStatusService = async (
         // 9. ARRIVED AT DESTINATION HUB
         // =====================================================
 
-        if (
-            status ===
-            ShipmentStatus.ARRIVED_AT_DESTINATION_HUB
-        ) {
-            shipment.currentStatus =
-                ShipmentStatus.ARRIVED_AT_DESTINATION_HUB;
+        if (status === ShipmentStatus.ARRIVED_AT_DESTINATION_HUB) {
+            shipment.currentStatus = ShipmentStatus.ARRIVED_AT_DESTINATION_HUB;
 
-            shipment.currentHubId =
-                shipment.destinationHubId;
+            shipment.currentHubId = shipment.destinationHubId;
 
             shipment.currentAgentId = null;
 
-            shipment.journeyType =
-                JourneyType.DELIVERY;
+            shipment.journeyType = JourneyType.DELIVERY;
         }
 
         // =====================================================
         // 10. OUT FOR DELIVERY
         // =====================================================
 
-        if (
-            status === ShipmentStatus.OUT_FOR_DELIVERY
-        ) {
-            if (
-                !agentId &&
-                !shipment.currentAgentId
-            ) {
-                const error: any = new Error(
-                    "Delivery Agent Id is required."
-                );
+        if (status === ShipmentStatus.OUT_FOR_DELIVERY) {
+            if (!agentId && !shipment.currentAgentId) {
+                const error: any = new Error("Delivery Agent Id is required.");
 
-                error.statusCode =
-                    StatusCode.Bad_Request;
+                error.statusCode = StatusCode.Bad_Request;
 
                 throw error;
             }
@@ -795,8 +726,7 @@ export const updateShipmentStatusService = async (
                     "Failed to synchronize shipment state updates with the Order Service."
                 );
 
-                error.statusCode =
-                    StatusCode.Internal_Server_Error;
+                error.statusCode = StatusCode.Internal_Server_Error;
 
                 throw error;
             }
@@ -806,9 +736,7 @@ export const updateShipmentStatusService = async (
         // 11. DELIVERED
         // =====================================================
 
-        if (
-            status === ShipmentStatus.DELIVERED
-        ) {
+        if (status === ShipmentStatus.DELIVERED) {
             try {
                 await updateOrderItemStatus(
                     shipment.orderId.toString(),
@@ -825,8 +753,7 @@ export const updateShipmentStatusService = async (
                     "Failed to synchronize shipment state updates with the Order Service."
                 );
 
-                error.statusCode =
-                    StatusCode.Internal_Server_Error;
+                error.statusCode = StatusCode.Internal_Server_Error;
 
                 throw error;
             }
@@ -839,13 +766,11 @@ export const updateShipmentStatusService = async (
         shipment.currentStatus = status;
 
         if (agentId) {
-            shipment.currentAgentId =
-                normalizedAgentId;
+            shipment.currentAgentId = normalizedAgentId;
         }
 
         if (hubId) {
-            shipment.currentHubId =
-                normalizedHubId;
+            shipment.currentHubId = normalizedHubId;
         }
 
         // =====================================================
@@ -869,7 +794,6 @@ export const updateShipmentStatusService = async (
         await shipment.save();
 
         return shipment;
-
     } catch (error) {
         throw error;
     }
@@ -907,122 +831,245 @@ export const getShipmentByOrderItemIdService = async (orderItemId: string) => {
     };
 };
 
-
-
-export interface AssignDeliveryAgentPayload {
-    agentId: string;
+export interface BulkUpdateShipmentPayload {
     shipmentIds: string[];
+    agentId?: string;
+    status: ShipmentStatus;
+    remarks?: string;
     updatedBy: string;
 }
 
-export const assignAgentToShipmentsService = async (
-    payload: AssignDeliveryAgentPayload
-) => {
+export const bulkUpdateShipmentService = async (payload: BulkUpdateShipmentPayload) => {
     const session = await mongoose.startSession();
 
     try {
-        const { agentId, shipmentIds, updatedBy } = payload;
+        const { shipmentIds, agentId, status, remarks, updatedBy } = payload;
+
+        const updatedShipments: any[] = [];
 
         await session.withTransaction(async () => {
-            // Validate Agent
-            const agent = await Agent.findById(agentId).session(session);
-
-            if (!agent) {
-                const error: any = new Error("Agent not found.");
-                error.statusCode = StatusCode.Not_Found;
+            // --------------------------------------------------
+            // 1. Validate updatedBy
+            // --------------------------------------------------
+            if (!mongoose.Types.ObjectId.isValid(updatedBy)) {
+                const error: any = new Error("Invalid updatedBy.");
+                error.statusCode = StatusCode.Bad_Request;
                 throw error;
             }
 
-            if (!agent.isActive || !agent.isAvailable) {
+            // --------------------------------------------------
+            // 2. Validate shipment IDs
+            // --------------------------------------------------
+            for (const shipmentId of shipmentIds) {
+                if (!mongoose.Types.ObjectId.isValid(shipmentId)) {
+                    const error: any = new Error(`Invalid shipment ID: ${shipmentId}`);
+                    error.statusCode = StatusCode.Bad_Request;
+                    throw error;
+                }
+            }
+
+            // --------------------------------------------------
+            // 3. Validate new status
+            // --------------------------------------------------
+            if (!Object.values(ShipmentStatus).includes(status)) {
+                const error: any = new Error(`Invalid shipment status: ${status}`);
+                error.statusCode = StatusCode.Bad_Request;
+                throw error;
+            }
+
+            // --------------------------------------------------
+            // 4. Check whether this status requires an agent
+            // --------------------------------------------------
+            const requiresAgent =
+                status === ShipmentStatus.DELIVERY_AGENT_ASSIGNED ||
+                status === ShipmentStatus.PICKUP_ASSIGNED;
+
+            if (requiresAgent && !agentId) {
                 const error: any = new Error(
-                    "Selected agent is not available."
+                    `agentId is required when changing shipment status to "${status}".`
                 );
                 error.statusCode = StatusCode.Bad_Request;
                 throw error;
             }
 
-            for (const shipmentId of shipmentIds) {
-                if (!mongoose.Types.ObjectId.isValid(shipmentId)) {
-                    throw new Error(`Invalid shipment id: ${shipmentId}`);
+            // --------------------------------------------------
+            // 5. Validate agent only when agentId is provided
+            // --------------------------------------------------
+            let agent: any = null;
+
+            if (agentId) {
+                if (!mongoose.Types.ObjectId.isValid(agentId)) {
+                    const error: any = new Error("Invalid agentId.");
+                    error.statusCode = StatusCode.Bad_Request;
+                    throw error;
                 }
 
+                agent = await Agent.findById(agentId).session(session);
+
+                if (!agent) {
+                    const error: any = new Error("Agent not found.");
+                    error.statusCode = StatusCode.Not_Found;
+                    throw error;
+                }
+
+                if (!agent.isActive || !agent.isAvailable) {
+                    const error: any = new Error("Selected agent is not available.");
+                    error.statusCode = StatusCode.Bad_Request;
+                    throw error;
+                }
+            }
+
+            // --------------------------------------------------
+            // 6. Process every shipment
+            // --------------------------------------------------
+            for (const shipmentId of shipmentIds) {
                 const shipment: any = await Shipment.findById(shipmentId).session(session);
 
                 if (!shipment) {
-                    throw new Error(`Shipment ${shipmentId} not found.`);
+                    const error: any = new Error(`Shipment ${shipmentId} not found.`);
+                    error.statusCode = StatusCode.Not_Found;
+                    throw error;
                 }
 
-                // Shipment must be in destination hub
-                if (
-                    shipment.currentStatus !==
-                    ShipmentStatus.ARRIVED_AT_DESTINATION_HUB
-                ) {
-                    throw new Error(
-                        `Shipment ${shipment.awbNumber} is not ready for delivery assignment.`
+                // --------------------------------------------------
+                // IMPORTANT:
+                // Get CURRENT status from database.
+                // Do not receive currentStatus from request.
+                // --------------------------------------------------
+                const currentStatus = shipment.currentStatus as ShipmentStatus;
+
+                // --------------------------------------------------
+                // 7. Check status transition
+                // --------------------------------------------------
+                const allowedStatuses = SHIPMENT_STATUS_TRANSITIONS[currentStatus];
+
+                if (!allowedStatuses?.includes(status)) {
+                    const error: any = new Error(
+                        `Shipment ${shipment.awbNumber || shipment._id} cannot move from "${currentStatus}" to "${status}".`
                     );
+
+                    error.statusCode = StatusCode.Bad_Request;
+                    throw error;
                 }
-                // Validate that the delivery agent belongs to the shipment's destination hub
+
+                // --------------------------------------------------
+                // 8. Agent assignment
+                // --------------------------------------------------
+                if (agentId && agent) {
+                    // For delivery, agent should belong to
+                    // destination/current hub.
+                    const requiredHubId = shipment.destinationHubId || shipment.currentHubId;
+
+                    if (
+                        requiredHubId &&
+                        agent.hubId &&
+                        requiredHubId.toString() !== agent.hubId.toString()
+                    ) {
+                        const error: any = new Error(
+                            `Agent ${agent.fullName} does not belong to the required hub for shipment ${shipment.awbNumber || shipment._id}.`
+                        );
+
+                        error.statusCode = StatusCode.Bad_Request;
+                        throw error;
+                    }
+
+                    // Assign agent
+                    shipment.currentAgentId = agent._id;
+
+                    // Maintain agent history
+                    if (
+                        !shipment.agentIds.some(
+                            (id: mongoose.Types.ObjectId) => id.toString() === agent._id.toString()
+                        )
+                    ) {
+                        shipment.agentIds.push(agent._id);
+                    }
+                }
+
+                // --------------------------------------------------
+                // 9. Update status
+                // --------------------------------------------------
+                shipment.currentStatus = status;
+
+                // --------------------------------------------------
+                // 10. Journey type
+                // --------------------------------------------------
                 if (
-                    shipment.destinationHubId.toString() !== agent.hubId.toString()
+                    status === ShipmentStatus.ARRIVED_AT_DESTINATION_HUB ||
+                    status === ShipmentStatus.DELIVERY_AGENT_ASSIGNED ||
+                    status === ShipmentStatus.OUT_FOR_DELIVERY
                 ) {
-                    throw new Error(
-                        `Delivery agent does not belong to the shipment's destination hub.`
+                    shipment.journeyType = JourneyType.DELIVERY;
+                }
+
+                // --------------------------------------------------
+                // 11. Update current hub when arriving
+                // --------------------------------------------------
+                if (status === ShipmentStatus.ARRIVED_AT_DESTINATION_HUB) {
+                    shipment.currentHubId = shipment.destinationHubId;
+                }
+
+                // --------------------------------------------------
+                // 12. Maintain hub history
+                // --------------------------------------------------
+                if (shipment.currentHubId) {
+                    const hubExists = shipment.hubIds.some(
+                        (id: mongoose.Types.ObjectId) =>
+                            id.toString() === shipment.currentHubId.toString()
                     );
-                }
-                // Assign Delivery Agent
-                shipment.currentAgentId = agent._id;
-                shipment.currentStatus =
-                    ShipmentStatus.DELIVERY_AGENT_ASSIGNED;
-                shipment.journeyType = JourneyType.DELIVERY;
 
-                // Maintain Agent History
-                if (
-                    !shipment.agentIds.some(
-                        (id: mongoose.Types.ObjectId) =>
-                            id.toString() === agent._id.toString()
-                    )
-                ) {
-                    shipment.agentIds.push(agent._id);
+                    if (!hubExists) {
+                        shipment.hubIds.push(shipment.currentHubId);
+                    }
                 }
 
-                // Maintain Hub History
-                if (
-                    !shipment.hubIds.some(
-                        (id: mongoose.Types.ObjectId) =>
-                            id.toString() === agent.hubId.toString()
-                    )
-                ) {
-                    shipment.hubIds.push(agent.hubId);
+                // --------------------------------------------------
+                // 13. Clear current agent when shipment reaches hub
+                // --------------------------------------------------
+                if (status === ShipmentStatus.ARRIVED_AT_DESTINATION_HUB) {
+                    shipment.currentAgentId = null;
                 }
 
-                // Journey Entry
+                // --------------------------------------------------
+                // 14. Journey history
+                // --------------------------------------------------
                 shipment.journeyDetails.push({
-                    event: JourneyEventType.DELIVERY_AGENT_ASSIGNED,
-                    status: ShipmentStatus.DELIVERY_AGENT_ASSIGNED,
-                    hubId: shipment.currentHubId,
-                    agentId: agent._id,
-                    remarks: `Assigned to delivery agent ${agent.fullName}`,
+                    event: status,
+                    status,
+                    hubId: shipment.currentHubId || null,
+                    agentId: shipment.currentAgentId || null,
+                    remarks: remarks || "",
                     updatedBy: new mongoose.Types.ObjectId(updatedBy),
                     eventAt: new Date(),
                 });
 
+                // --------------------------------------------------
+                // 15. Save shipment
+                // --------------------------------------------------
                 await shipment.save({ session });
+
+                updatedShipments.push(shipment);
             }
 
-            // Optional: mark agent unavailable
-            // agent.status = AgentStatus.ON_DELIVERY;
-            // agent.isAvailable = false;
-            await agent.save({ session });
+            // --------------------------------------------------
+            // 16. Update agent availability
+            // --------------------------------------------------
+            if (agentId && agent) {
+                agent.status = AgentStatus.ON_DELIVERY;
+                agent.isAvailable = false;
+
+                await agent.save({ session });
+            }
         });
 
         return {
             success: true,
-            assignedAgentId: agentId,
-            totalAssigned: shipmentIds.length,
+            totalUpdated: updatedShipments.length,
+            shipments: updatedShipments,
         };
     } catch (error) {
         throw error;
     } finally {
-        session.endSession();
+        await session.endSession();
     }
 };

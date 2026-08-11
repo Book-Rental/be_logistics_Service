@@ -17,7 +17,6 @@ router.get("/order-item/:orderItemId", getShipmentByOrderItemId);
 router.get("/:shipmentID", getShipmentById);
 router.get("/agent/:agentId", getShipmentByAgentId);
 router.patch("/:shipmentId/status", updateShipmentStatus);
-router.post('/assign-agent',assignAgentToShipments);
-
+router.post("/bulk-update", assignAgentToShipments);
 
 export default router;

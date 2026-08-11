@@ -245,7 +245,7 @@ export const getAgentByHubIdService = async (
             totalHubAgents,
             activeHubAgents,
             inactiveHubAgents,
-            offDutyHubAgents
+            offDutyHubAgents,
         ] = await Promise.all([
             // Paginated record subset
             Agent.find(searchFilter)
@@ -262,7 +262,7 @@ export const getAgentByHubIdService = async (
 
             // 🚀 Analytics Counters: Checked across the entire hub, ignoring current viewport status filters
             Agent.countDocuments(hubSummaryFilter),
-            Agent.countDocuments({ ...hubSummaryFilter, status: "Active" }),   // Adjust lowercase/uppercase to match your Enum exactly
+            Agent.countDocuments({ ...hubSummaryFilter, status: "Active" }), // Adjust lowercase/uppercase to match your Enum exactly
             Agent.countDocuments({ ...hubSummaryFilter, status: "Inactive" }), // Adjust lowercase/uppercase to match your Enum exactly
             Agent.countDocuments({ ...hubSummaryFilter, status: "Off Duty" }), // Adjust lowercase/uppercase to match your Enum exactly
         ]);
@@ -374,7 +374,7 @@ export const updateAgentService = async (agentId: string, payload: UpdateAgentPa
                 "status",
                 "hubId",
                 "isActive",
-                "isAvailable"
+                "isAvailable",
             ];
 
             for (const field of allowedFields) {

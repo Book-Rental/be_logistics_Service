@@ -10,7 +10,7 @@ import {
 
 const router = Router();
 // 1. Specific static routes (Place these first)
-router.get('/check-serviceability', checkHubServiceability);
+router.get("/check-serviceability", checkHubServiceability);
 router.get("/", getAllHubs);
 
 // 2. Specific nested routes (Place these before generic dynamic params)

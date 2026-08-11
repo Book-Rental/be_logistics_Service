@@ -84,15 +84,9 @@ export const getShipmentsByHub = async (req: Request, res: Response) => {
     }
 };
 
-
-export const getShipmentsByReceiverZipCode = async (
-    req: Request,
-    res: Response
-) => {
+export const getShipmentsByReceiverZipCode = async (req: Request, res: Response) => {
     try {
-
         const hubId = req.params.hubId as string;
-
 
         if (!hubId) {
             return failResponse(
@@ -101,17 +95,9 @@ export const getShipmentsByReceiverZipCode = async (
                 StatusCode.Bad_Request
             );
         }
-        const shipments = await getShipmentsByReceiverZipCodeService(
-            hubId,
-            req.query
-        );
+        const shipments = await getShipmentsByReceiverZipCodeService(hubId, req.query);
 
-        return successResponse(
-            res,
-            shipments,
-            "Shipments fetched successfully.",
-            StatusCode.OK
-        );
+        return successResponse(res, shipments, "Shipments fetched successfully.", StatusCode.OK);
     } catch (error: any) {
         return failResponse(
             res,
@@ -121,20 +107,32 @@ export const getShipmentsByReceiverZipCode = async (
     }
 };
 
-
 export const checkHubServiceability = async (req: Request, res: Response) => {
     try {
         const { pincode } = req.query;
         console.log("pincode", req.query);
         if (!pincode) {
-            failResponse(res, "hubId and pincode query parameters are required", StatusCode.Bad_Request);
+            failResponse(
+                res,
+                "hubId and pincode query parameters are required",
+                StatusCode.Bad_Request
+            );
             return;
         }
 
         const isServiceable = await checkHubServiceabilityService(pincode as string);
 
-        successResponse(res, { isServiceable }, "Serviceability checked successfully.", StatusCode.OK);
+        successResponse(
+            res,
+            { isServiceable },
+            "Serviceability checked successfully.",
+            StatusCode.OK
+        );
     } catch (error: any) {
-        failResponse(res, error.message || "Failed to check serviceability", StatusCode.Internal_Server_Error);
+        failResponse(
+            res,
+            error.message || "Failed to check serviceability",
+            StatusCode.Internal_Server_Error
+        );
     }
-}
+};

@@ -161,9 +161,6 @@ export const findHubByPincode = async (pincode: string) => {
     return hub;
 };
 
-
-
-
 interface GetShipmentsQuery {
     page?: number;
     limit?: number;
@@ -173,20 +170,21 @@ interface GetShipmentsQuery {
     journeyType?: JourneyType; // Fixed: Kept optional to match interface strategy
 }
 
-export const getShipmentsByHubService = async (
-    hubId: string,
-    query: GetShipmentsQuery = {}
-) => {
+export const getShipmentsByHubService = async (hubId: string, query: GetShipmentsQuery = {}) => {
     try {
         // 1. Fail-fast guard against malformed MongoDB ObjectIDs
         if (!mongoose.Types.ObjectId.isValid(hubId)) {
-            throw Object.assign(new Error("Invalid Hub ID format string requested"), { statusCode: 400 });
+            throw Object.assign(new Error("Invalid Hub ID format string requested"), {
+                statusCode: 400,
+            });
         }
 
         // Validate hub existence to prevent empty response confusion
         const hub = await Hub.findById(hubId).lean();
         if (!hub) {
-            throw Object.assign(new Error("Physical transit hub branch not found"), { statusCode: 404 });
+            throw Object.assign(new Error("Physical transit hub branch not found"), {
+                statusCode: 404,
+            });
         }
 
         // 2. Setup uniform pagination calculations
@@ -220,7 +218,7 @@ export const getShipmentsByHubService = async (
             const searchConditions: any[] = [
                 { awbNumber: { $regex: trimmedSearch, $options: "i" } },
                 { "receiver.name": { $regex: trimmedSearch, $options: "i" } },
-                { "receiver.city": { $regex: trimmedSearch, $options: "i" } }
+                { "receiver.city": { $regex: trimmedSearch, $options: "i" } },
             ];
 
             // Avoid heavy $toString scans: parse search term directly if it's a valid hex string
@@ -249,8 +247,8 @@ export const getShipmentsByHubService = async (
                                 from: "hubs", // Ensure this matches collection name exactly
                                 localField: "originHubId",
                                 foreignField: "_id",
-                                as: "originHub"
-                            }
+                                as: "originHub",
+                            },
                         },
                         { $unwind: { path: "$originHub", preserveNullAndEmptyArrays: true } },
                         // Populate destinationHubId manually
@@ -259,8 +257,8 @@ export const getShipmentsByHubService = async (
                                 from: "hubs",
                                 localField: "destinationHubId",
                                 foreignField: "_id",
-                                as: "destinationHub"
-                            }
+                                as: "destinationHub",
+                            },
                         },
                         { $unwind: { path: "$destinationHub", preserveNullAndEmptyArrays: true } },
                         // Populate currentAgentId manually
@@ -269,8 +267,8 @@ export const getShipmentsByHubService = async (
                                 from: "agents", // Ensure this matches collection name exactly
                                 localField: "currentAgentId",
                                 foreignField: "_id",
-                                as: "assignedAgent"
-                            }
+                                as: "assignedAgent",
+                            },
                         },
                         { $unwind: { path: "$assignedAgent", preserveNullAndEmptyArrays: true } },
                         // Output layer filtering out payload fields
@@ -300,11 +298,11 @@ export const getShipmentsByHubService = async (
                                 "assignedAgent.fullName": 1,
                                 "assignedAgent.phoneNumber": 1,
                                 "assignedAgent.status": 1,
-                            }
-                        }
-                    ]
-                }
-            }
+                            },
+                        },
+                    ],
+                },
+            },
         ]);
 
         // Extract numbers safely out of facet response structural wrapper
@@ -324,24 +322,30 @@ export const getShipmentsByHubService = async (
             codAmount: ship.codAmount,
             expectedDeliveryDate: ship.expectedDeliveryDate,
             journeyType: ship.journeyType || null,
-            originHub: ship.originHub ? {
-                _id: ship.originHub._id,
-                name: ship.originHub.name,
-                hubCode: ship.originHub.hubCode,
-                city: ship.originHub.city
-            } : null,
-            destinationHub: ship.destinationHub ? {
-                _id: ship.destinationHub._id,
-                name: ship.destinationHub.name,
-                hubCode: ship.destinationHub.hubCode,
-                city: ship.destinationHub.city
-            } : null,
-            assignedAgent: ship.assignedAgent ? {
-                _id: ship.assignedAgent._id,
-                fullName: ship.assignedAgent.fullName,
-                phoneNumber: ship.assignedAgent.phoneNumber,
-                status: ship.assignedAgent.status
-            } : null,
+            originHub: ship.originHub
+                ? {
+                      _id: ship.originHub._id,
+                      name: ship.originHub.name,
+                      hubCode: ship.originHub.hubCode,
+                      city: ship.originHub.city,
+                  }
+                : null,
+            destinationHub: ship.destinationHub
+                ? {
+                      _id: ship.destinationHub._id,
+                      name: ship.destinationHub.name,
+                      hubCode: ship.destinationHub.hubCode,
+                      city: ship.destinationHub.city,
+                  }
+                : null,
+            assignedAgent: ship.assignedAgent
+                ? {
+                      _id: ship.assignedAgent._id,
+                      fullName: ship.assignedAgent.fullName,
+                      phoneNumber: ship.assignedAgent.phoneNumber,
+                      status: ship.assignedAgent.status,
+                  }
+                : null,
             receiverName: ship.receiver?.name ?? null,
             receiverCity: ship.receiver?.city ?? null,
             createdAt: ship.createdAt,
@@ -362,12 +366,9 @@ export const getShipmentsByHubService = async (
     }
 };
 
-
-
-
 interface GetShipmentsByPincodeQuery {
     pincode?: string;
-    page?: number;   // Added pagination fields for production safety
+    page?: number; // Added pagination fields for production safety
     limit?: number;
     journeyType?: JourneyType; // Optional filter for journey type
     status?: ShipmentStatus; // Optional filter for shipment status
@@ -402,7 +403,6 @@ export const getShipmentsByReceiverZipCodeService = async (
         // 3. Construct indexing criteria using the correct casing
         const filter: any = {
             currentHubId: new mongoose.Types.ObjectId(hubId),
-
         };
         if (query.status) {
             filter.currentStatus = query.status;
@@ -423,7 +423,8 @@ export const getShipmentsByReceiverZipCodeService = async (
 
         // 4. Parallel data fetches using capitalized schema class names
         const [rawShipments, totalRecords] = await Promise.all([
-            shipment.find(filter) // 🚀 Corrected from lower-case 'shipment' to upper-case 'Shipment'
+            shipment
+                .find(filter) // 🚀 Corrected from lower-case 'shipment' to upper-case 'Shipment'
                 .populate("currentAgentId", "fullName phoneNumber")
                 .populate("originHubId", "hubName hubCode")
                 .populate("destinationHubId", "hubName hubCode")
@@ -431,7 +432,7 @@ export const getShipmentsByReceiverZipCodeService = async (
                 .skip(skip)
                 .limit(limit)
                 .lean(),
-            shipment.countDocuments(filter)
+            shipment.countDocuments(filter),
         ]);
 
         const totalPages = Math.ceil(totalRecords / limit) || 1;
@@ -462,14 +463,13 @@ export const getShipmentsByReceiverZipCodeService = async (
                 totalPages,
                 currentPage: page,
                 limit,
-                hasMore: page < totalPages
-            }
+                hasMore: page < totalPages,
+            },
         };
     } catch (error) {
         throw error;
     }
 };
-
 
 export const checkHubServiceabilityService = async (pincode: string) => {
     try {
@@ -479,11 +479,11 @@ export const checkHubServiceabilityService = async (pincode: string) => {
 
         const hub = await Hub.findOne({
             serviceablePincodes: pincode.trim(),
-            status: HubStatus.ACTIVE
+            status: HubStatus.ACTIVE,
         });
 
         return !!hub; // Returns true if a hub is found, false otherwise
     } catch (error) {
         throw error;
     }
-}
+};

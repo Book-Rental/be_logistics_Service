@@ -3,7 +3,7 @@ import { StatusCode } from "../utils/StatusCodes";
 import { successResponse, failResponse, errorResponse } from "../utils/response";
 
 import {
-    assignAgentToShipmentsService,
+    bulkUpdateShipmentService,
     createShipmentService,
     getShipmentByAgentIdService,
     getShipmentByIdService,
@@ -12,6 +12,8 @@ import {
     updateShipmentStatusService,
 } from "../services/shipmentService";
 import { Messages } from "../utils/constants";
+import mongoose from "mongoose";
+import { ShipmentStatus } from "../models/shipment";
 
 export const createShipment = async (req: Request, res: Response) => {
     try {
@@ -145,22 +147,89 @@ export const getShipmentByOrderItemId = async (req: Request, res: Response) => {
     }
 };
 
-
 export const assignAgentToShipments = async (req: Request, res: Response) => {
     try {
-        const { shipmentIds, agentId, updatedBy } = req.body;
+        const { shipmentIds, agentId, updatedBy, status, remarks } = req.body;
 
+        // --------------------------------------------
+        // shipmentIds validation
+        // --------------------------------------------
         if (!shipmentIds || !Array.isArray(shipmentIds) || shipmentIds.length === 0) {
-            return failResponse(res, "shipmentIds must be a non-empty array.", StatusCode.Bad_Request);
+            return failResponse(
+                res,
+                "shipmentIds must be a non-empty array.",
+                StatusCode.Bad_Request
+            );
         }
 
-        if (!agentId) {
-            return failResponse(res, "agentId is required.", StatusCode.Bad_Request);
+        // --------------------------------------------
+        // Validate shipment IDs
+        // --------------------------------------------
+        const invalidShipmentIds = shipmentIds.filter(
+            (id: string) => !mongoose.Types.ObjectId.isValid(id)
+        );
+
+        if (invalidShipmentIds.length > 0) {
+            return failResponse(
+                res,
+                `Invalid shipment ID(s): ${invalidShipmentIds.join(", ")}`,
+                StatusCode.Bad_Request
+            );
         }
 
-        const updatedShipments = await assignAgentToShipmentsService({ agentId, shipmentIds, updatedBy });
+        // --------------------------------------------
+        // Status validation
+        // --------------------------------------------
+        if (!status) {
+            return failResponse(res, "status is required.", StatusCode.Bad_Request);
+        }
 
-        return successResponse(res, updatedShipments, "Agent assigned to shipments successfully.", StatusCode.OK);
+        if (!Object.values(ShipmentStatus).includes(status as ShipmentStatus)) {
+            return failResponse(res, `Invalid shipment status: ${status}`, StatusCode.Bad_Request);
+        }
+
+        // --------------------------------------------
+        // Agent validation
+        // --------------------------------------------
+        const requiresAgent =
+            status === ShipmentStatus.DELIVERY_AGENT_ASSIGNED ||
+            status === ShipmentStatus.PICKUP_ASSIGNED;
+
+        if (requiresAgent && !agentId) {
+            return failResponse(
+                res,
+                `agentId is required for status "${status}".`,
+                StatusCode.Bad_Request
+            );
+        }
+
+        if (agentId && !mongoose.Types.ObjectId.isValid(agentId)) {
+            return failResponse(res, "Invalid agentId.", StatusCode.Bad_Request);
+        }
+
+        // --------------------------------------------
+        // updatedBy validation
+        // --------------------------------------------
+        if (!updatedBy) {
+            return failResponse(res, "updatedBy is required.", StatusCode.Bad_Request);
+        }
+
+        if (!mongoose.Types.ObjectId.isValid(updatedBy)) {
+            return failResponse(res, "Invalid updatedBy.", StatusCode.Bad_Request);
+        }
+
+        // --------------------------------------------
+        // Call service
+        // --------------------------------------------
+        const result = await bulkUpdateShipmentService({
+            shipmentIds,
+            agentId,
+            status: status as ShipmentStatus,
+            remarks,
+            updatedBy,
+        });
+
+        return successResponse(res, result, "Shipments updated successfully.", StatusCode.OK);
     } catch (error: any) {
         return failResponse(
             res,

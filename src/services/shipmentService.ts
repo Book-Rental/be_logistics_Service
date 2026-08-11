@@ -161,6 +161,8 @@ export const createShipmentService = async (payload: CreateShipmentPayload) => {
 
 export const readyForPickupService = async (orderItemId: string) => {
     const session = await mongoose.startSession();
+    let updatedShipment: any = null;
+
 
     try {
         let shipment: any;
@@ -238,9 +240,28 @@ export const readyForPickupService = async (orderItemId: string) => {
             pickupAgent.currentShipmentId = shipment._id;
 
             await pickupAgent.save({ session });
-            await shipment.save({ session });
+            updatedShipment = await shipment.save({ session });
         });
+        if (updatedShipment) {
+            try {
+                await updateOrderItemStatus(
+                    updatedShipment.orderId.toString(),
+                    updatedShipment.orderItemId.toString(),
+                    "shipped"
+                );
+            } catch (apiError: any) {
+                console.error(
+                    `Order service synchronization failed for shipment: ${updatedShipment._id}`,
+                    apiError.message
+                );
 
+                const error: any = new Error(
+                    "Failed to synchronize shipment state updates with the Order Service."
+                );
+                error.statusCode = StatusCode.Internal_Server_Error;
+                throw error;
+            }
+        }
         return shipment;
     } finally {
         session.endSession();

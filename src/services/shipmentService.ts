@@ -1227,12 +1227,12 @@ export const bulkUpdateShipmentService = async (payload: BulkUpdateShipmentPaylo
             // --------------------------------------------------
             // 16. Update agent availability
             // --------------------------------------------------
-            if (agentId && agent) {
-                agent.status = AgentStatus.ON_DELIVERY;
-                agent.isAvailable = false;
+            // if (agentId && agent) {
+            //     agent.status = AgentStatus.ON_DELIVERY;
+            //     agent.isAvailable = false;
 
-                await agent.save({ session });
-            }
+            //     await agent.save({ session });
+            // }
         });
 
         return {

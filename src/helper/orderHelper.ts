@@ -11,13 +11,16 @@ export const getOrderItemDetails = async (orderId: string, itemId: string) => {
         const response = await axios.get(
             `${process.env.ORDER_SERVICE_URL}/api/order/${orderId}/Item/${itemId}`,
             {
-                headers: getInternalHeaders() // 🚀 Fixed Authorization block injection
+                headers: getInternalHeaders(), // 🚀 Fixed Authorization block injection
             }
         );
 
         return response.data?.data || response.data;
     } catch (error: any) {
-        console.error(`Failed to fetch order details for Order: ${orderId}, Item: ${itemId}`, error.message);
+        console.error(
+            `Failed to fetch order details for Order: ${orderId}, Item: ${itemId}`,
+            error.message
+        );
         throw new Error(error.response?.data?.message || "Failed to fetch order details.");
     }
 };
@@ -39,7 +42,7 @@ export const updateOrderItemStatus = async (orderId: string, itemId: string, sta
             `${process.env.ORDER_SERVICE_URL}/api/order/update/${orderId}`,
             payload,
             {
-                headers: getInternalHeaders() // 🚀 Fixed Authorization block injection
+                headers: getInternalHeaders(), // 🚀 Fixed Authorization block injection
             }
         );
 

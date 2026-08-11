@@ -370,6 +370,8 @@ interface GetShipmentsByPincodeQuery {
     page?: number;   // Added pagination fields for production safety
     limit?: number;
     journeyType?: JourneyType; // Optional filter for journey type
+    status?: ShipmentStatus; // Optional filter for shipment status
+    agentId?: string; // Optional filter for assigned agent
 }
 
 export const getShipmentsByReceiverZipCodeService = async (
@@ -400,9 +402,19 @@ export const getShipmentsByReceiverZipCodeService = async (
         // 3. Construct indexing criteria using the correct casing
         const filter: any = {
             currentHubId: new mongoose.Types.ObjectId(hubId),
-            // Explicit cast hit index optimizations
-            currentStatus: ShipmentStatus.ARRIVED_AT_DESTINATION_HUB
+
         };
+        if (query.status) {
+            filter.currentStatus = query.status;
+        } else {
+            // filter.currentStatus = ShipmentStatus.ARRIVED_AT_DESTINATION_HUB;
+        }
+        if (query.journeyType) {
+            filter.journeyType = query.journeyType;
+        }
+        if (query.agentId && mongoose.Types.ObjectId.isValid(query.agentId)) {
+            filter.currentAgentId = new mongoose.Types.ObjectId(query.agentId);
+        }
 
         // Handle structural check on incoming query string parameters
         if (query.pincode && query.pincode.trim() !== "") {

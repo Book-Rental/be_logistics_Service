@@ -440,16 +440,33 @@ export const getShipmentByAgentIdService = async (
     }
 };
 
-
-export const updateShipmentStatusService = async (payload: UpdateShipmentStatusPayload) => {
+export const updateShipmentStatusService = async (
+    payload: UpdateShipmentStatusPayload
+) => {
     try {
-        const { shipmentId, status, event, remarks, agentId, hubId, updatedBy } = payload;
+        const {
+            shipmentId,
+            status,
+            event,
+            remarks,
+            agentId,
+            hubId,
+            updatedBy,
+        } = payload;
+
+        // =====================================================
+        // 1. Validate Shipment ID
+        // =====================================================
 
         if (!mongoose.Types.ObjectId.isValid(shipmentId)) {
             const error: any = new Error("Invalid Shipment Id.");
             error.statusCode = StatusCode.Bad_Request;
             throw error;
         }
+
+        // =====================================================
+        // 2. Get Shipment
+        // =====================================================
 
         const shipment = await Shipment.findById(shipmentId);
 
@@ -459,92 +476,58 @@ export const updateShipmentStatusService = async (payload: UpdateShipmentStatusP
             throw error;
         }
 
-        // Validate status movement
-        const allowedStatuses = SHIPMENT_STATUS_TRANSITIONS[shipment.currentStatus];
+        // =====================================================
+        // 3. Validate Requested Status Transition
+        // =====================================================
 
-        if (!allowedStatuses.includes(status)) {
+        const allowedStatuses =
+            SHIPMENT_STATUS_TRANSITIONS[shipment.currentStatus];
+
+        if (!allowedStatuses?.includes(status)) {
             const error: any = new Error(
                 `Shipment cannot move from "${shipment.currentStatus}" to "${status}".`
             );
+
             error.statusCode = StatusCode.Bad_Request;
             throw error;
         }
 
-        // Pickup Assignment
-        if (status === ShipmentStatus.PICKUP_ASSIGNED && !agentId) {
-            const error: any = new Error("Pickup Agent Id is required.");
-            error.statusCode = StatusCode.Bad_Request;
-            throw error;
-        }
+        // =====================================================
+        // 4. Validate Agent
+        // =====================================================
 
-        // Delivery Assignment
-        if (status === ShipmentStatus.DELIVERY_AGENT_ASSIGNED && !agentId) {
-            const error: any = new Error("Delivery Agent Id is required.");
-            error.statusCode = StatusCode.Bad_Request;
-            throw error;
-        }
-
-        // Hub Validation
         if (
-            [
-                ShipmentStatus.ARRIVED_AT_ORIGIN_HUB,
-                ShipmentStatus.SORTING_COMPLETED,
-                ShipmentStatus.IN_TRANSIT,
-                ShipmentStatus.ARRIVED_AT_DESTINATION_HUB,
-            ].includes(status) &&
-            !hubId
+            status === ShipmentStatus.PICKUP_ASSIGNED &&
+            !agentId
         ) {
-            const error: any = new Error("Hub Id is required.");
+            const error: any = new Error(
+                "Pickup Agent Id is required."
+            );
+
             error.statusCode = StatusCode.Bad_Request;
             throw error;
         }
-        if (status === ShipmentStatus.ARRIVED_AT_ORIGIN_HUB) {
-            if (!shipment.originHubId) {
-                const error: any = new Error(
-                    "Origin Hub Id is required."
-                );
-                error.statusCode = StatusCode.Bad_Request;
-                throw error;
-            }
 
-            // Shipment has reached the origin hub
-            shipment.currentHubId = shipment.originHubId;
-            const isSameHub =
-                shipment.originHubId.toString() ===
-                shipment.destinationHubId.toString();
-            // Check whether this hub is also the destination hub
-            if (
-                isSameHub
-            ) {
-                // No middle-mile movement is required.
-                // Directly move shipment to destination hub state.
-                shipment.currentStatus =
-                    ShipmentStatus.ARRIVED_AT_DESTINATION_HUB;
+        if (
+            status === ShipmentStatus.DELIVERY_AGENT_ASSIGNED &&
+            !agentId
+        ) {
+            const error: any = new Error(
+                "Delivery Agent Id is required."
+            );
 
-                shipment.journeyType = JourneyType.DELIVERY;
-
-                // No longer assigned to the pickup/middle-mile agent
-                shipment.currentAgentId = null;
-
-                // Add the automatically generated destination arrival event
-                shipment.journeyDetails.push({
-                    event: "Shipment directly reached destination hub",
-                    status: ShipmentStatus.ARRIVED_AT_DESTINATION_HUB,
-                    hubId: shipment.destinationHubId,
-                    agentId: null,
-                    remarks:
-                        "Origin hub and destination hub are the same. Shipment moved directly to destination hub status.",
-                    updatedBy: shipment.originHubId,
-                    eventAt: new Date(),
-                });
-            } else {
-                // Normal flow continues from origin hub
-                shipment.currentStatus = ShipmentStatus.ARRIVED_AT_ORIGIN_HUB;
-            }
+            error.statusCode = StatusCode.Bad_Request;
+            throw error;
         }
-        if (status === ShipmentStatus.PICKUP_COMPLETED) {
+
+        // =====================================================
+        // 7. PICKUP Assigened - Update Order Service
+        // =====================================================
+
+        if (
+            status === ShipmentStatus.PICKUP_ASSIGNED
+        ) {
             try {
-                // Adjust URL string and body parameters to match your internal Order Service gateway API contract
                 await updateOrderItemStatus(
                     shipment.orderId.toString(),
                     shipment.orderItemId.toString(),
@@ -556,27 +539,247 @@ export const updateShipmentStatusService = async (payload: UpdateShipmentStatusP
                     apiError.message
                 );
 
-                // Fail-Safe: Block shipment progression if the downstream order table update fails
                 const error: any = new Error(
                     "Failed to synchronize shipment state updates with the Order Service."
                 );
-                error.statusCode = StatusCode.Internal_Server_Error;
+
+                error.statusCode =
+                    StatusCode.Internal_Server_Error;
+
                 throw error;
             }
         }
-        if (status == ShipmentStatus.ARRIVED_AT_DESTINATION_HUB) {
-            //here we have to assigen the agent  so that he can deliver the shipment to the customer
-            if (status === ShipmentStatus.ARRIVED_AT_DESTINATION_HUB) {
-                // Transition the journey state to Delivery for the final-mile legs
-                shipment.journeyType = JourneyType.DELIVERY;
+        // =====================================================
+        // 5. Validate Hub
+        // =====================================================
 
-                // Clear the previous middle-mile/pickup agent ID so it can be assigned to a delivery agent
-                shipment.currentAgentId = null;
-            }
+        if (
+            [
+                ShipmentStatus.ARRIVED_AT_ORIGIN_HUB,
+                ShipmentStatus.SORTING_COMPLETED,
+                ShipmentStatus.IN_TRANSIT,
+                ShipmentStatus.ARRIVED_AT_DESTINATION_HUB,
+            ].includes(status) &&
+            !hubId
+        ) {
+            const error: any = new Error(
+                "Hub Id is required."
+            );
+
+            error.statusCode = StatusCode.Bad_Request;
+            throw error;
         }
-        if (status == ShipmentStatus.OUT_FOR_DELIVERY) {
+
+        // =====================================================
+        // 6. Normalize IDs
+        // =====================================================
+
+        const normalizedAgentId = agentId
+            ? new mongoose.Types.ObjectId(agentId)
+            : shipment.currentAgentId ?? undefined;
+
+        const normalizedHubId = hubId
+            ? new mongoose.Types.ObjectId(hubId)
+            : shipment.currentHubId ?? undefined;
+
+        const normalizedUpdatedBy =
+            new mongoose.Types.ObjectId(updatedBy);
+
+
+
+        // =====================================================
+        // 8. ARRIVED AT ORIGIN HUB
+        // =====================================================
+
+        if (
+            status === ShipmentStatus.ARRIVED_AT_ORIGIN_HUB
+        ) {
+            // -------------------------------------------------
+            // Validate origin hub
+            // -------------------------------------------------
+
+            if (!shipment.originHubId) {
+                const error: any = new Error(
+                    "Origin Hub Id is missing in shipment."
+                );
+
+                error.statusCode =
+                    StatusCode.Bad_Request;
+
+                throw error;
+            }
+
+            // -------------------------------------------------
+            // Validate destination hub
+            // -------------------------------------------------
+
+            if (!shipment.destinationHubId) {
+                const error: any = new Error(
+                    "Destination Hub Id is missing in shipment."
+                );
+
+                error.statusCode =
+                    StatusCode.Bad_Request;
+
+                throw error;
+            }
+
+            // -------------------------------------------------
+            // FIRST:
+            // Always update to ARRIVED_AT_ORIGIN_HUB
+            // -------------------------------------------------
+
+            shipment.currentStatus =
+                ShipmentStatus.ARRIVED_AT_ORIGIN_HUB;
+
+            shipment.currentHubId =
+                shipment.originHubId;
+
+            shipment.currentAgentId =
+                normalizedAgentId;
+
+            // -------------------------------------------------
+            // Add origin hub journey
+            // -------------------------------------------------
+
+            shipment.journeyDetails.push({
+                event:
+                    event ||
+                    "Shipment arrived at origin hub",
+
+                status:
+                    ShipmentStatus.ARRIVED_AT_ORIGIN_HUB,
+
+                hubId:
+                    shipment.originHubId,
+
+                agentId:
+                    normalizedAgentId,
+
+                remarks:
+                    remarks || "",
+
+                updatedBy:
+                    normalizedUpdatedBy,
+
+                eventAt: new Date(),
+            });
+
+            // -------------------------------------------------
+            // Check same hub
+            // -------------------------------------------------
+
+            const isSameHub =
+                shipment.originHubId.toString() ===
+                shipment.destinationHubId.toString();
+
+            // -------------------------------------------------
+            // DIFFERENT HUB
+            // -------------------------------------------------
+
+            if (!isSameHub) {
+                await shipment.save();
+
+                return shipment;
+            }
+
+            // =================================================
+            // SAME HUB
+            // =================================================
+            //
+            // We have already recorded:
+            //
+            // ARRIVED_AT_ORIGIN_HUB
+            //
+            // Now automatically record:
+            //
+            // ARRIVED_AT_DESTINATION_HUB
+            //
+            // =================================================
+
+            shipment.currentStatus =
+                ShipmentStatus.ARRIVED_AT_DESTINATION_HUB;
+
+            shipment.currentHubId =
+                shipment.destinationHubId;
+
+            shipment.currentAgentId = null;
+
+            shipment.journeyType =
+                JourneyType.DELIVERY;
+
+            // -------------------------------------------------
+            // Add destination hub journey
+            // -------------------------------------------------
+
+            shipment.journeyDetails.push({
+                event:
+                    "Arrived At Hub",
+
+                status:
+                    ShipmentStatus.ARRIVED_AT_DESTINATION_HUB,
+
+                hubId:
+                    shipment.destinationHubId,
+
+                agentId: null,
+
+                remarks:
+                    "Origin hub and destination hub are the same. Shipment automatically moved to destination hub.",
+
+                updatedBy:
+                    normalizedUpdatedBy,
+
+                eventAt: new Date(),
+            });
+
+            await shipment.save();
+
+            return shipment;
+        }
+
+        // =====================================================
+        // 9. ARRIVED AT DESTINATION HUB
+        // =====================================================
+
+        if (
+            status ===
+            ShipmentStatus.ARRIVED_AT_DESTINATION_HUB
+        ) {
+            shipment.currentStatus =
+                ShipmentStatus.ARRIVED_AT_DESTINATION_HUB;
+
+            shipment.currentHubId =
+                shipment.destinationHubId;
+
+            shipment.currentAgentId = null;
+
+            shipment.journeyType =
+                JourneyType.DELIVERY;
+        }
+
+        // =====================================================
+        // 10. OUT FOR DELIVERY
+        // =====================================================
+
+        if (
+            status === ShipmentStatus.OUT_FOR_DELIVERY
+        ) {
+            if (
+                !agentId &&
+                !shipment.currentAgentId
+            ) {
+                const error: any = new Error(
+                    "Delivery Agent Id is required."
+                );
+
+                error.statusCode =
+                    StatusCode.Bad_Request;
+
+                throw error;
+            }
+
             try {
-                // Adjust URL string and body parameters to match your internal Order Service gateway API contract
                 await updateOrderItemStatus(
                     shipment.orderId.toString(),
                     shipment.orderItemId.toString(),
@@ -588,17 +791,25 @@ export const updateShipmentStatusService = async (payload: UpdateShipmentStatusP
                     apiError.message
                 );
 
-                // Fail-Safe: Block shipment progression if the downstream order table update fails
                 const error: any = new Error(
                     "Failed to synchronize shipment state updates with the Order Service."
                 );
-                error.statusCode = StatusCode.Internal_Server_Error;
+
+                error.statusCode =
+                    StatusCode.Internal_Server_Error;
+
                 throw error;
             }
         }
-        if (status == ShipmentStatus.DELIVERED) {
+
+        // =====================================================
+        // 11. DELIVERED
+        // =====================================================
+
+        if (
+            status === ShipmentStatus.DELIVERED
+        ) {
             try {
-                // Adjust URL string and body parameters to match your internal Order Service gateway API contract
                 await updateOrderItemStatus(
                     shipment.orderId.toString(),
                     shipment.orderItemId.toString(),
@@ -610,30 +821,36 @@ export const updateShipmentStatusService = async (payload: UpdateShipmentStatusP
                     apiError.message
                 );
 
-                // Fail-Safe: Block shipment progression if the downstream order table update fails
                 const error: any = new Error(
                     "Failed to synchronize shipment state updates with the Order Service."
                 );
-                error.statusCode = StatusCode.Internal_Server_Error;
+
+                error.statusCode =
+                    StatusCode.Internal_Server_Error;
+
                 throw error;
             }
         }
 
-        const normalizedAgentId = agentId
-            ? new mongoose.Types.ObjectId(agentId)
-            : shipment.currentAgentId;
-
-        const normalizedHubId = hubId ? new mongoose.Types.ObjectId(hubId) : shipment.currentHubId;
+        // =====================================================
+        // 12. NORMAL STATUS UPDATE
+        // =====================================================
 
         shipment.currentStatus = status;
 
         if (agentId) {
-            shipment.currentAgentId = normalizedAgentId;
+            shipment.currentAgentId =
+                normalizedAgentId;
         }
 
         if (hubId) {
-            shipment.currentHubId = normalizedHubId;
+            shipment.currentHubId =
+                normalizedHubId;
         }
+
+        // =====================================================
+        // 13. Add Journey
+        // =====================================================
 
         shipment.journeyDetails.push({
             event,
@@ -641,13 +858,18 @@ export const updateShipmentStatusService = async (payload: UpdateShipmentStatusP
             hubId: normalizedHubId,
             agentId: normalizedAgentId,
             remarks: remarks || "",
-            updatedBy: updatedBy ? new mongoose.Types.ObjectId(updatedBy) : null,
+            updatedBy: normalizedUpdatedBy,
             eventAt: new Date(),
         });
+
+        // =====================================================
+        // 14. Save
+        // =====================================================
 
         await shipment.save();
 
         return shipment;
+
     } catch (error) {
         throw error;
     }
@@ -700,8 +922,6 @@ export const assignAgentToShipmentsService = async (
 
     try {
         const { agentId, shipmentIds, updatedBy } = payload;
-
-
 
         await session.withTransaction(async () => {
             // Validate Agent

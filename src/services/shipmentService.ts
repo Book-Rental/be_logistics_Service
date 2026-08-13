@@ -1354,10 +1354,16 @@ export const deleteShipmentService = async (shipmentId: string) => {
 }
 
 
-
-export const getShipmentStatuseByAwbNumberService = async (awbNumber: string) => {
+export const getShipmentStatuseByAwbNumberService = async (
+    awbNumber: string
+) => {
     try {
-        const shipment = await Shipment.findOne({ awbNumber }).lean();
+        const shipment = await Shipment.findOne({ awbNumber })
+            .populate({
+                path: "currentAgentId",
+                select: "agentId fullName phoneNumber email vehicleType status currentLocation",
+            })
+            .lean();
 
         if (!shipment) {
             const error: any = new Error("Shipment not found.");
@@ -1365,18 +1371,33 @@ export const getShipmentStatuseByAwbNumberService = async (awbNumber: string) =>
             throw error;
         }
 
+        const currentAgent = shipment.currentAgentId as any;
+        console.log('cuurent agent id ', currentAgent)
         return {
             shipmentId: shipment._id,
             awbNumber: shipment.awbNumber,
-            currentStatus: shipment.currentStatus,
-            journeyDetails: shipment.journeyDetails.map((item: any) => ({
-                event: item.event,
-                status: item.status,
-                eventAt: item.eventAt,
-            })),
-        };
 
+            currentStatus: shipment.currentStatus,
+
+            pickupAgent: currentAgent
+                ? {
+                    _id: currentAgent._id,
+                    agentId: currentAgent.agentId,
+                    fullName: currentAgent.fullName,
+                    phone: currentAgent.phoneNumber,
+                    vehicleType: currentAgent.vehicleType,
+                }   
+                : null,
+
+            journeyDetails: shipment.journeyDetails.map(
+                (item: any) => ({
+                    event: item.event,
+                    status: item.status,
+                    eventAt: item.eventAt,
+                })
+            ),
+        };
     } catch (error) {
         throw error;
     }
-}
+};

@@ -159,7 +159,7 @@ export const createShipmentService = async (payload: CreateShipmentPayload) => {
     }
 };
 
-export const readyForPickupService = async (orderItemId: string) => {
+export const readyForPickupService = async (shipmentId: string) => {
     const session = await mongoose.startSession();
     let updatedShipment: any = null;
 
@@ -167,7 +167,7 @@ export const readyForPickupService = async (orderItemId: string) => {
         let shipment: any;
 
         await session.withTransaction(async () => {
-            shipment = await Shipment.findOne({ orderItemId }).session(session);
+            shipment = await Shipment.findById(shipmentId).session(session);
             console.log("shipment", shipment);
             if (!shipment) {
                 throw new Error("Shipment not found.");
@@ -187,8 +187,8 @@ export const readyForPickupService = async (orderItemId: string) => {
                 status: AgentStatus.ACTIVE,
             })
                 .sort({
-                    activeShipmentsCount: 1, // 🟢 Pick whoever has the least work first (Fair Share)
-                    updatedAt: 1, // 🟢 If tied, pick whoever was updated longest ago (Round Robin)
+                    activeShipmentsCount: 1,
+                    updatedAt: 1,
                 })
                 .session(session);
 
@@ -241,13 +241,31 @@ export const readyForPickupService = async (orderItemId: string) => {
             await pickupAgent.save({ session });
             updatedShipment = await shipment.save({ session });
         });
-        if (updatedShipment) {
+        if (updatedShipment && updatedShipment.shipmentType === ShipmentType.FORWARD) {
             try {
                 await updateOrderItemStatus(
                     updatedShipment.orderId.toString(),
                     updatedShipment.orderItemId.toString(),
                     "shipped"
                 );
+            } catch (apiError: any) {
+                console.error(
+                    `Order service synchronization failed for shipment: ${updatedShipment._id}`,
+                    apiError.message
+                );
+
+                const error: any = new Error(
+                    "Failed to synchronize shipment state updates with the Order Service."
+                );
+                error.statusCode = StatusCode.Internal_Server_Error;
+                throw error;
+            }
+        } else if (updatedShipment && updatedShipment.shipmentType === ShipmentType.RETURN) {
+            try {
+                await updateOrderItemStatus(
+                    updatedShipment.orderId.toString(),
+                    updatedShipment.orderItemId.toString(),
+                    "return_in_progress");
             } catch (apiError: any) {
                 console.error(
                     `Order service synchronization failed for shipment: ${updatedShipment._id}`,
@@ -1069,8 +1087,7 @@ export const bulkUpdateShipmentService = async (payload: BulkUpdateShipmentPaylo
 
                 if (!allowedStatuses?.includes(status)) {
                     const error: any = new Error(
-                        `Shipment ${
-                            shipment.awbNumber || shipment._id
+                        `Shipment ${shipment.awbNumber || shipment._id
                         } cannot move from "${currentStatus}" to "${status}".`
                     );
 
@@ -1107,8 +1124,7 @@ export const bulkUpdateShipmentService = async (payload: BulkUpdateShipmentPaylo
                         requiredHubId.toString() !== agent.hubId.toString()
                     ) {
                         const error: any = new Error(
-                            `Agent ${agent.fullName} does not belong to the required hub for shipment ${
-                                shipment.awbNumber || shipment._id
+                            `Agent ${agent.fullName} does not belong to the required hub for shipment ${shipment.awbNumber || shipment._id
                             }.`
                         );
 
@@ -1148,8 +1164,7 @@ export const bulkUpdateShipmentService = async (payload: BulkUpdateShipmentPaylo
                 if (status === ShipmentStatus.OUT_FOR_DELIVERY) {
                     if (!shipment.currentAgentId) {
                         const error: any = new Error(
-                            `Delivery Agent is required for shipment ${
-                                shipment.awbNumber || shipment._id
+                            `Delivery Agent is required for shipment ${shipment.awbNumber || shipment._id
                             }.`
                         );
 
@@ -1303,3 +1318,65 @@ export const bulkUpdateShipmentService = async (payload: BulkUpdateShipmentPaylo
         await session.endSession();
     }
 };
+
+
+export const deleteShipmentService = async (shipmentId: string) => {
+    try {
+        if (!shipmentId) {
+            const error: any = new Error("shipmentId is required.");
+            error.statusCode = StatusCode.Bad_Request;
+            throw error;
+        }
+
+        if (!mongoose.Types.ObjectId.isValid(shipmentId)) {
+            const error: any = new Error("Invalid shipmentId.");
+            error.statusCode = StatusCode.Bad_Request;
+            throw error;
+        }
+
+        const shipment = await Shipment.findById(shipmentId);
+
+        if (!shipment) {
+            const error: any = new Error("Shipment not found.");
+            error.statusCode = StatusCode.Not_Found;
+            throw error;
+        }
+
+        await Shipment.deleteOne({ _id: shipmentId });
+
+        return {
+            success: true,
+            message: "Shipment deleted successfully.",
+        };
+    } catch (error) {
+        throw error;
+    }
+}
+
+
+
+export const getShipmentStatuseByAwbNumberService = async (awbNumber: string) => {
+    try {
+        const shipment = await Shipment.findOne({ awbNumber }).lean();
+
+        if (!shipment) {
+            const error: any = new Error("Shipment not found.");
+            error.statusCode = StatusCode.Not_Found;
+            throw error;
+        }
+
+        return {
+            shipmentId: shipment._id,
+            awbNumber: shipment.awbNumber,
+            currentStatus: shipment.currentStatus,
+            journeyDetails: shipment.journeyDetails.map((item: any) => ({
+                event: item.event,
+                status: item.status,
+                eventAt: item.eventAt,
+            })),
+        };
+
+    } catch (error) {
+        throw error;
+    }
+}

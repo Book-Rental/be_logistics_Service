@@ -5,9 +5,11 @@ import { successResponse, failResponse, errorResponse } from "../utils/response"
 import {
     bulkUpdateShipmentService,
     createShipmentService,
+    deleteShipmentService,
     getShipmentByAgentIdService,
     getShipmentByIdService,
     getShipmentByOrderItemIdService,
+    getShipmentStatuseByAwbNumberService,
     readyForPickupService,
     updateShipmentStatusService,
 } from "../services/shipmentService";
@@ -47,13 +49,13 @@ export const createShipment = async (req: Request, res: Response) => {
 
 export const readyForPickup = async (req: Request, res: Response) => {
     try {
-        const { orderItemId } = req.params as unknown as Record<string, string>;
+        const {  shipmentID} = req.params as unknown as Record<string, string>;
 
-        if (!orderItemId) {
-            return failResponse(res, "Order item ID is required.", StatusCode.Bad_Request);
+        if (!shipmentID) {
+            return failResponse(res, "shipmentID is required.", StatusCode.Bad_Request);
         }
 
-        const shipment = await readyForPickupService(orderItemId);
+        const shipment = await readyForPickupService(shipmentID);
 
         return successResponse(
             res,
@@ -238,3 +240,55 @@ export const assignAgentToShipments = async (req: Request, res: Response) => {
         );
     }
 };
+
+
+export const deleteShipment = async (req: Request, res: Response) => {
+    try {
+        const shipmentId = req.params.shipmentId as string;
+
+        if (!shipmentId) {
+            return failResponse(res, "shipmentId is required.", StatusCode.Bad_Request);
+        }
+
+        // Call the service to delete the shipment
+        const result = await deleteShipmentService(shipmentId);
+
+        return successResponse(res, result, "Shipment deleted successfully.", StatusCode.OK);
+    } catch (error: any) {
+        return failResponse(
+            res,
+            error.message,
+            error.statusCode || StatusCode.Internal_Server_Error
+        );
+    }
+}
+
+
+export const getShipmentStatusByAWBNumber = async (req: Request, res: Response) => {
+    try {
+        const { awbNumber } = req.params as { awbNumber: string };
+
+        if (!awbNumber) {
+            return failResponse(res, "AWB Number is required.", StatusCode.Bad_Request);
+        }
+
+        const shipment = await getShipmentStatuseByAwbNumberService(awbNumber);
+
+        if (!shipment) {
+            return failResponse(res, "Shipment not found.", StatusCode.Not_Found);
+        }
+
+        return successResponse(
+            res,
+            shipment,
+            "Shipment status fetched successfully.",
+            StatusCode.OK
+        );
+    } catch (error: any) {
+        return failResponse(
+            res,
+            error.message,
+            error.statusCode || StatusCode.Internal_Server_Error
+        );
+    }
+}

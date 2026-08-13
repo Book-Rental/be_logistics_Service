@@ -77,6 +77,20 @@ export enum JourneyEventType {
     DELIVERED = "Delivered",
 
     RETURN_INITIATED = "Return Initiated",
+    
+    RETURN_SHIPMENT_CREATED = "Return Shipment Created",
+
+    RETURN_PICKUP_ASSIGNED = "Return Pickup Assigned",
+
+    RETURN_OUT_FOR_PICKUP = "Return Out For Pickup",
+
+    RETURN_PICKUP_COMPLETED = "Return Pickup Completed",
+
+    RETURN_ARRIVED_AT_HUB = "Return Arrived At Hub",
+
+    RETURN_IN_TRANSIT = "Return In Transit",
+
+    RETURN_DELIVERED_TO_SELLER = "Return Delivered To Seller",
 
     RETURNED = "Returned",
 
@@ -267,6 +281,8 @@ export interface IShipment extends Document {
     journeyType: JourneyType;
 
     agentIds: Types.ObjectId[];
+
+    parentShipmentId?: Types.ObjectId | null;
 }
 
 const ShipmentSchema = new Schema<IShipment>(
@@ -391,6 +407,11 @@ const ShipmentSchema = new Schema<IShipment>(
             type: Schema.Types.ObjectId,
             ref: "LogisticsAuth",
         },
+        parentShipmentId: {
+            type: Schema.Types.ObjectId,
+            ref: "Shipment",
+            default: null,
+        },
     },
     {
         timestamps: true,
@@ -406,7 +427,10 @@ ShipmentSchema.index({ awbNumber: 1 }, { unique: true });
 
 // Order
 ShipmentSchema.index({ orderId: 1 });
-ShipmentSchema.index({ orderItemId: 1 }, { unique: true });
+ShipmentSchema.index(
+    { orderItemId: 1, shipmentType: 1 },
+    { unique: true }
+);
 
 // Users
 ShipmentSchema.index({ sellerId: 1 });

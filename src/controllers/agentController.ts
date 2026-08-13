@@ -175,7 +175,7 @@ export const getAgentShipments = async (req: Request, res: Response) => {
     try {
         const agentId = req.params.agentId as string;
 
-        const shipments = await getAgentShipmentsService(agentId);
+        const shipments = await getAgentShipmentsService(agentId, req.query);
 
         return successResponse(
             res,

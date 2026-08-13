@@ -449,19 +449,45 @@ export const deleteAgentService = async (agentId: string, updatedBy?: string) =>
         await session.endSession();
     }
 };
+export const getAgentShipmentsService = async (
+    agentId: string,
+    query: { page?: number; limit?: number }
+) => {
+    // 1. Destructure pagination variables from your utility helper
+    const { skip, limit, page } = buildPaginationQuery(query);
 
-export const getAgentShipmentsService = async (agentId: string) => {
-    const shipments = await shipment
-        .find({
-            currentAgentId: agentId,
-            currentStatus: {
-                $nin: ["Delivered", "Returned", "Cancelled"],
-            },
-        })
-        .populate("originHubId", "hubName hubCode address")
-        .populate("destinationHubId", "hubName hubCode address")
-        .populate("currentAgentId", "fullName phoneNumber")
-        .sort({ createdAt: -1 });
+    // 2. Define the filter criteria
+    const filter = {
+        currentAgentId: agentId,
+        currentStatus: {
+            $nin: ["Delivered", "Returned", "Cancelled"],
+        },
+    };
 
-    return shipments;
+    // 3. Run queries in parallel for better response times
+    const [shipments, totalDocs] = await Promise.all([
+        shipment
+            .find(filter)
+            .populate("originHubId", "hubName hubCode address")
+            .populate("destinationHubId", "hubName hubCode address")
+            .populate("currentAgentId", "fullName phoneNumber")
+            .sort({ createdAt: -1 })
+            .skip(skip)
+            .limit(limit)
+            .lean(), // Returns plain JS objects for faster performance
+        shipment.countDocuments(filter),
+    ]);
+
+    // 4. Return paginated result payload
+    return {
+        data: shipments,
+        pagination: {
+            totalDocs,
+            currentPage: page,
+            limit,
+            totalPages: Math.ceil(totalDocs / limit),
+            hasNextPage: page * limit < totalDocs,
+            hasPrevPage: page > 1,
+        },
+    };
 };

@@ -9,60 +9,129 @@ export interface UpdateShipmentStatusPayload {
     hubId?: string;
     updatedBy: string;
 }
-export const SHIPMENT_STATUS_TRANSITIONS: Record<ShipmentStatus, ShipmentStatus[]> = {
-    // Shipment created
-    [ShipmentStatus.CREATED]: [ShipmentStatus.READY_FOR_PICKUP, ShipmentStatus.CANCELLED],
+export const SHIPMENT_STATUS_TRANSITIONS: Record<
+    ShipmentStatus,
+    ShipmentStatus[]
+> = {
+    // =====================================================
+    // CREATED
+    // Used for both:
+    // FORWARD shipment
+    // RETURN shipment
+    // EXCHANGE shipment
+    // =====================================================
 
-    // Ready for pickup
-    [ShipmentStatus.READY_FOR_PICKUP]: [ShipmentStatus.PICKUP_ASSIGNED, ShipmentStatus.CANCELLED],
+    [ShipmentStatus.CREATED]: [
+        ShipmentStatus.READY_FOR_PICKUP,
+        ShipmentStatus.CANCELLED,
+    ],
 
-    // Pickup agent assigned
-    [ShipmentStatus.PICKUP_ASSIGNED]: [ShipmentStatus.OUT_FOR_PICKUP, ShipmentStatus.CANCELLED],
+    // =====================================================
+    // PICKUP
+    // =====================================================
 
-    // Agent going to seller
-    [ShipmentStatus.OUT_FOR_PICKUP]: [ShipmentStatus.PICKUP_COMPLETED, ShipmentStatus.CANCELLED],
+    [ShipmentStatus.READY_FOR_PICKUP]: [
+        ShipmentStatus.PICKUP_ASSIGNED,
+        ShipmentStatus.CANCELLED,
+    ],
 
-    // Pickup completed
-    // The shipment must first reach the origin hub.
-    [ShipmentStatus.PICKUP_COMPLETED]: [ShipmentStatus.ARRIVED_AT_ORIGIN_HUB],
+    [ShipmentStatus.PICKUP_ASSIGNED]: [
+        ShipmentStatus.OUT_FOR_PICKUP,
+        ShipmentStatus.CANCELLED,
+    ],
 
-    // Origin hub reached
-    // If originHubId === destinationHubId,
-    // the service automatically changes the current status
-    // to ARRIVED_AT_DESTINATION_HUB while keeping both
-    // journey events.
-    [ShipmentStatus.ARRIVED_AT_ORIGIN_HUB]: [ShipmentStatus.ARRIVED_AT_DESTINATION_HUB],
+    [ShipmentStatus.OUT_FOR_PICKUP]: [
+        ShipmentStatus.PICKUP_COMPLETED,
+        ShipmentStatus.CANCELLED,
+    ],
 
-    // Destination hub reached
-    // Now assign the final-mile delivery agent.
-    [ShipmentStatus.ARRIVED_AT_DESTINATION_HUB]: [ShipmentStatus.DELIVERY_AGENT_ASSIGNED],
+    [ShipmentStatus.PICKUP_COMPLETED]: [
+        ShipmentStatus.ARRIVED_AT_ORIGIN_HUB,
+    ],
 
-    // Delivery agent assigned
-    [ShipmentStatus.DELIVERY_AGENT_ASSIGNED]: [ShipmentStatus.OUT_FOR_DELIVERY],
+    // =====================================================
+    // ORIGIN HUB
+    // =====================================================
 
-    // Shipment out for delivery
-    [ShipmentStatus.OUT_FOR_DELIVERY]: [ShipmentStatus.DELIVERED, ShipmentStatus.DELIVERY_FAILED],
+    [ShipmentStatus.ARRIVED_AT_ORIGIN_HUB]: [
+        ShipmentStatus.SORTING_COMPLETED,
+        ShipmentStatus.ARRIVED_AT_DESTINATION_HUB,
+    ],
 
-    // Delivery failed
+    // =====================================================
+    // SORTING
+    // =====================================================
+
+    [ShipmentStatus.SORTING_COMPLETED]: [
+        ShipmentStatus.IN_TRANSIT,
+        ShipmentStatus.ARRIVED_AT_DESTINATION_HUB,
+    ],
+
+    // =====================================================
+    // IN TRANSIT
+    // =====================================================
+
+    [ShipmentStatus.IN_TRANSIT]: [
+        ShipmentStatus.ARRIVED_AT_DESTINATION_HUB,
+    ],
+
+    // =====================================================
+    // DESTINATION HUB
+    // =====================================================
+
+    [ShipmentStatus.ARRIVED_AT_DESTINATION_HUB]: [
+        ShipmentStatus.DELIVERY_AGENT_ASSIGNED,
+    ],
+
+    // =====================================================
+    // DELIVERY AGENT
+    // =====================================================
+
+    [ShipmentStatus.DELIVERY_AGENT_ASSIGNED]: [
+        ShipmentStatus.OUT_FOR_DELIVERY,
+    ],
+
+    // =====================================================
+    // OUT FOR DELIVERY
+    // =====================================================
+
+    [ShipmentStatus.OUT_FOR_DELIVERY]: [
+        ShipmentStatus.DELIVERED,
+        ShipmentStatus.DELIVERY_FAILED,
+    ],
+
+    // =====================================================
+    // DELIVERY FAILED
+    // =====================================================
+
     [ShipmentStatus.DELIVERY_FAILED]: [
         ShipmentStatus.OUT_FOR_DELIVERY,
         ShipmentStatus.RETURN_INITIATED,
     ],
 
-    // Return initiated
-    [ShipmentStatus.RETURN_INITIATED]: [ShipmentStatus.RETURNED],
+    // =====================================================
+    // RETURN INITIATED
+    //
+    // This is mainly useful if you decide to mark the
+    // existing shipment as return initiated.
+    //
+    // If you create a NEW return shipment, the new shipment
+    // starts from CREATED instead.
+    // =====================================================
 
-    // Terminal states
-    [ShipmentStatus.RETURNED]: [],
+    [ShipmentStatus.RETURN_INITIATED]: [
+        ShipmentStatus.RETURNED,
+    ],
+
+    // =====================================================
+    // TERMINAL STATES
+    // =====================================================
 
     [ShipmentStatus.DELIVERED]: [],
 
+    [ShipmentStatus.RETURNED]: [],
+
     [ShipmentStatus.CANCELLED]: [],
-
-    // Reserved for multi-hub shipment flow
-    [ShipmentStatus.SORTING_COMPLETED]: [],
-
-    [ShipmentStatus.IN_TRANSIT]: [],
 };
 
 import { randomInt } from "crypto";

@@ -7,6 +7,7 @@ import {
     getShipmentsByHub,
     getShipmentsByReceiverZipCode,
 } from "../controllers/hubController";
+import { getHubEmployees } from "../controllers/hubEmployeeController";
 
 const router = Router();
 // 1. Specific static routes (Place these first)
@@ -22,5 +23,11 @@ router.get("/:hubId", getHubByHubId);
 
 // 4. State-changing routes
 router.post("/create", createHub);
+
+
+router.get(
+    "/employees/:id",
+    getHubEmployees
+);
 
 export default router;

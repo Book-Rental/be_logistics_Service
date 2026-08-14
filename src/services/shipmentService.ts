@@ -265,7 +265,8 @@ export const readyForPickupService = async (shipmentId: string) => {
                 await updateOrderItemStatus(
                     updatedShipment.orderId.toString(),
                     updatedShipment.orderItemId.toString(),
-                    "return_in_progress");
+                    "return_in_progress"
+                );
             } catch (apiError: any) {
                 console.error(
                     `Order service synchronization failed for shipment: ${updatedShipment._id}`,
@@ -331,12 +332,13 @@ export const getShipmentByIdService = async (shipmentId: string) => {
             receiver: shipment.receiver,
 
             shipmentType: shipment.shipmentType,
+            journeyType:shipment.journeyType,
             paymentMode: shipment.paymentMode,
             codAmount: shipment.codAmount,
 
             currentStatus: shipment.currentStatus,
             expectedDeliveryDate: shipment.expectedDeliveryDate,
-
+          
             infrastructure: {
                 originHub: shipment.originHubId,
                 destinationHub: shipment.destinationHubId,
@@ -1087,7 +1089,8 @@ export const bulkUpdateShipmentService = async (payload: BulkUpdateShipmentPaylo
 
                 if (!allowedStatuses?.includes(status)) {
                     const error: any = new Error(
-                        `Shipment ${shipment.awbNumber || shipment._id
+                        `Shipment ${
+                            shipment.awbNumber || shipment._id
                         } cannot move from "${currentStatus}" to "${status}".`
                     );
 
@@ -1124,7 +1127,8 @@ export const bulkUpdateShipmentService = async (payload: BulkUpdateShipmentPaylo
                         requiredHubId.toString() !== agent.hubId.toString()
                     ) {
                         const error: any = new Error(
-                            `Agent ${agent.fullName} does not belong to the required hub for shipment ${shipment.awbNumber || shipment._id
+                            `Agent ${agent.fullName} does not belong to the required hub for shipment ${
+                                shipment.awbNumber || shipment._id
                             }.`
                         );
 
@@ -1164,7 +1168,8 @@ export const bulkUpdateShipmentService = async (payload: BulkUpdateShipmentPaylo
                 if (status === ShipmentStatus.OUT_FOR_DELIVERY) {
                     if (!shipment.currentAgentId) {
                         const error: any = new Error(
-                            `Delivery Agent is required for shipment ${shipment.awbNumber || shipment._id
+                            `Delivery Agent is required for shipment ${
+                                shipment.awbNumber || shipment._id
                             }.`
                         );
 
@@ -1319,7 +1324,6 @@ export const bulkUpdateShipmentService = async (payload: BulkUpdateShipmentPaylo
     }
 };
 
-
 export const deleteShipmentService = async (shipmentId: string) => {
     try {
         if (!shipmentId) {
@@ -1351,12 +1355,9 @@ export const deleteShipmentService = async (shipmentId: string) => {
     } catch (error) {
         throw error;
     }
-}
+};
 
-
-export const getShipmentStatuseByAwbNumberService = async (
-    awbNumber: string
-) => {
+export const getShipmentStatuseByAwbNumberService = async (awbNumber: string) => {
     try {
         const shipment = await Shipment.findOne({ awbNumber })
             .populate({
@@ -1372,7 +1373,7 @@ export const getShipmentStatuseByAwbNumberService = async (
         }
 
         const currentAgent = shipment.currentAgentId as any;
-        console.log('cuurent agent id ', currentAgent)
+        console.log("cuurent agent id ", currentAgent);
         return {
             shipmentId: shipment._id,
             awbNumber: shipment.awbNumber,
@@ -1381,21 +1382,19 @@ export const getShipmentStatuseByAwbNumberService = async (
 
             pickupAgent: currentAgent
                 ? {
-                    _id: currentAgent._id,
-                    agentId: currentAgent.agentId,
-                    fullName: currentAgent.fullName,
-                    phone: currentAgent.phoneNumber,
-                    vehicleType: currentAgent.vehicleType,
-                }   
+                      _id: currentAgent._id,
+                      agentId: currentAgent.agentId,
+                      fullName: currentAgent.fullName,
+                      phone: currentAgent.phoneNumber,
+                      vehicleType: currentAgent.vehicleType,
+                  }
                 : null,
 
-            journeyDetails: shipment.journeyDetails.map(
-                (item: any) => ({
-                    event: item.event,
-                    status: item.status,
-                    eventAt: item.eventAt,
-                })
-            ),
+            journeyDetails: shipment.journeyDetails.map((item: any) => ({
+                event: item.event,
+                status: item.status,
+                eventAt: item.eventAt,
+            })),
         };
     } catch (error) {
         throw error;

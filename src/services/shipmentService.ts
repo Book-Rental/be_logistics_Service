@@ -846,11 +846,15 @@ export const updateShipmentStatusService = async (payload: UpdateShipmentStatusP
         // =====================================================
 
         if (status === ShipmentStatus.DELIVERED) {
+            const orderItemStatus =
+                shipment.shipmentType === ShipmentType.RETURN
+                    ? "returned"
+                    : "delivered";
             try {
                 await updateOrderItemStatus(
                     shipment.orderId.toString(),
                     shipment.orderItemId.toString(),
-                    "delivered"
+                    orderItemStatus
                 );
             } catch (apiError: any) {
                 console.error(

@@ -332,13 +332,13 @@ export const getShipmentByIdService = async (shipmentId: string) => {
             receiver: shipment.receiver,
 
             shipmentType: shipment.shipmentType,
-            journeyType:shipment.journeyType,
+            journeyType: shipment.journeyType,
             paymentMode: shipment.paymentMode,
             codAmount: shipment.codAmount,
 
             currentStatus: shipment.currentStatus,
             expectedDeliveryDate: shipment.expectedDeliveryDate,
-          
+
             infrastructure: {
                 originHub: shipment.originHubId,
                 destinationHub: shipment.destinationHubId,
@@ -1089,8 +1089,7 @@ export const bulkUpdateShipmentService = async (payload: BulkUpdateShipmentPaylo
 
                 if (!allowedStatuses?.includes(status)) {
                     const error: any = new Error(
-                        `Shipment ${
-                            shipment.awbNumber || shipment._id
+                        `Shipment ${shipment.awbNumber || shipment._id
                         } cannot move from "${currentStatus}" to "${status}".`
                     );
 
@@ -1127,8 +1126,7 @@ export const bulkUpdateShipmentService = async (payload: BulkUpdateShipmentPaylo
                         requiredHubId.toString() !== agent.hubId.toString()
                     ) {
                         const error: any = new Error(
-                            `Agent ${agent.fullName} does not belong to the required hub for shipment ${
-                                shipment.awbNumber || shipment._id
+                            `Agent ${agent.fullName} does not belong to the required hub for shipment ${shipment.awbNumber || shipment._id
                             }.`
                         );
 
@@ -1168,8 +1166,7 @@ export const bulkUpdateShipmentService = async (payload: BulkUpdateShipmentPaylo
                 if (status === ShipmentStatus.OUT_FOR_DELIVERY) {
                     if (!shipment.currentAgentId) {
                         const error: any = new Error(
-                            `Delivery Agent is required for shipment ${
-                                shipment.awbNumber || shipment._id
+                            `Delivery Agent is required for shipment ${shipment.awbNumber || shipment._id
                             }.`
                         );
 
@@ -1177,26 +1174,27 @@ export const bulkUpdateShipmentService = async (payload: BulkUpdateShipmentPaylo
 
                         throw error;
                     }
+                    if (shipment.shipmentType == 'Forward') {
+                        try {
+                            await updateOrderItemStatus(
+                                shipment.orderId.toString(),
+                                shipment.orderItemId.toString(),
+                                "out_for_delivery"
+                            );
+                        } catch (apiError: any) {
+                            console.error(
+                                `Order service synchronization failed for shipment: ${shipmentId}`,
+                                apiError.message
+                            );
 
-                    try {
-                        await updateOrderItemStatus(
-                            shipment.orderId.toString(),
-                            shipment.orderItemId.toString(),
-                            "out_for_delivery"
-                        );
-                    } catch (apiError: any) {
-                        console.error(
-                            `Order service synchronization failed for shipment: ${shipmentId}`,
-                            apiError.message
-                        );
+                            const error: any = new Error(
+                                "Failed to synchronize shipment state with the Order Service."
+                            );
 
-                        const error: any = new Error(
-                            "Failed to synchronize shipment state with the Order Service."
-                        );
+                            error.statusCode = StatusCode.Internal_Server_Error;
 
-                        error.statusCode = StatusCode.Internal_Server_Error;
-
-                        throw error;
+                            throw error;
+                        }
                     }
                 }
 
@@ -1382,12 +1380,12 @@ export const getShipmentStatuseByAwbNumberService = async (awbNumber: string) =>
 
             pickupAgent: currentAgent
                 ? {
-                      _id: currentAgent._id,
-                      agentId: currentAgent.agentId,
-                      fullName: currentAgent.fullName,
-                      phone: currentAgent.phoneNumber,
-                      vehicleType: currentAgent.vehicleType,
-                  }
+                    _id: currentAgent._id,
+                    agentId: currentAgent.agentId,
+                    fullName: currentAgent.fullName,
+                    phone: currentAgent.phoneNumber,
+                    vehicleType: currentAgent.vehicleType,
+                }
                 : null,
 
             journeyDetails: shipment.journeyDetails.map((item: any) => ({

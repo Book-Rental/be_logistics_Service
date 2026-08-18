@@ -2,11 +2,11 @@ import mongoose from "mongoose";
 import Hub, { HubStatus } from "../models/hub";
 import { LogisticsRole } from "../models/LogisticsAuth";
 import { createLogisticsUserService } from "./authService";
-import { HubEmployeeRole, HubEmployeeStatus } from "../models/hubEmployee";
+import { HubEmployeeRole, HubEmployeeStatus } from "../models/HubEmployee";
 import { buildPaginationQuery } from "../utils/paginationHelper";
 import { StatusCode } from "../utils/StatusCodes";
 import { generateEmployeeId } from "../utils/shipment";
-import HubEmployee from "../models/hubEmployee";
+import HubEmployee from "../models/HubEmployee";
 
 interface CreateManagerPayload {
     hubId: string;

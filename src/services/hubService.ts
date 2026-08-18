@@ -5,8 +5,8 @@ import { generateHubDetails } from "../utils/generateHubDetails";
 import mongoose from "mongoose";
 import { StatusCode } from "../utils/StatusCodes";
 import shipment, { JourneyType, ShipmentStatus } from "../models/shipment";
-import { buildPaginationQuery } from "../utils/paginationHelper";
-import { HubEmployeeRole } from "../models/hubEmployee";
+
+import { HubEmployeeRole } from "../models/HubEmployee";
 
 interface CreateHubPayload {
     hubName: string;

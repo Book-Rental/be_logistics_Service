@@ -17,7 +17,7 @@ import {
     SHIPMENT_STATUS_TRANSITIONS,
     UpdateShipmentStatusPayload,
 } from "../utils/shipment";
-import hubEmployee, { HubEmployeeRole, HubEmployeeStatus } from "../models/hubEmployee";
+import hubEmployee, { HubEmployeeRole, HubEmployeeStatus } from "../models/HubEmployee";
 interface ContactPayload {
     name: string;
     phone: string;

@@ -12,7 +12,7 @@ import { failResponse, successResponse } from "../utils/response";
 import { StatusCode } from "../utils/StatusCodes";
 import { Request, Response } from "express";
 import { uploadToCloudinary } from "../utils/uploadToCloudinary";
-import { HubEmployeeStatus } from "../models/hubEmployee";
+import { HubEmployeeStatus } from "../models/HubEmployee";
 
 // POST /agents
 export const createAgent = async (req: Request, res: Response) => {

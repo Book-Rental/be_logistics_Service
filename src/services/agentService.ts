@@ -11,8 +11,8 @@ import hubEmployee, {
     HubEmployeeStatus,
     VehicleType,
 
-} from "../models/hubEmployee";
-import HubEmployee from "../models/hubEmployee";
+} from "../models/HubEmployee";
+import HubEmployee from "../models/HubEmployee";
 import { generateEmployeeId } from "../utils/shipment";
 
 export const getAllAgentService = async (query: {
@@ -210,10 +210,10 @@ export const getAllAgentService = async (query: {
 
                 hub: agent.hub
                     ? {
-                          _id: agent.hub._id,
-                          name: agent.hub.name,
-                          hubCode: agent.hub.hubCode,
-                      }
+                        _id: agent.hub._id,
+                        name: agent.hub.name,
+                        hubCode: agent.hub.hubCode,
+                    }
                     : null,
 
                 name: agent.fullName,

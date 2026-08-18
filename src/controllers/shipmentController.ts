@@ -19,7 +19,6 @@ import { ShipmentStatus } from "../models/shipment";
 
 export const createShipment = async (req: Request, res: Response) => {
     try {
-        console.log("dataa", req.body);
         const shipment = await createShipmentService(req.body);
 
         return successResponse(
@@ -49,7 +48,7 @@ export const createShipment = async (req: Request, res: Response) => {
 
 export const readyForPickup = async (req: Request, res: Response) => {
     try {
-        const {  shipmentID} = req.params as unknown as Record<string, string>;
+        const { shipmentID } = req.params as unknown as Record<string, string>;
 
         if (!shipmentID) {
             return failResponse(res, "shipmentID is required.", StatusCode.Bad_Request);
@@ -241,7 +240,6 @@ export const assignAgentToShipments = async (req: Request, res: Response) => {
     }
 };
 
-
 export const deleteShipment = async (req: Request, res: Response) => {
     try {
         const shipmentId = req.params.shipmentId as string;
@@ -261,8 +259,7 @@ export const deleteShipment = async (req: Request, res: Response) => {
             error.statusCode || StatusCode.Internal_Server_Error
         );
     }
-}
-
+};
 
 export const getShipmentStatusByAWBNumber = async (req: Request, res: Response) => {
     try {
@@ -291,4 +288,4 @@ export const getShipmentStatusByAWBNumber = async (req: Request, res: Response) 
             error.statusCode || StatusCode.Internal_Server_Error
         );
     }
-}
+};

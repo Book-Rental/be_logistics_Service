@@ -1,5 +1,11 @@
 import mongoose from "mongoose";
-import { JourneyEventType, JourneyType, PaymentMode, ShipmentStatus, ShipmentType } from "../models/shipment";
+import {
+    JourneyEventType,
+    JourneyType,
+    PaymentMode,
+    ShipmentStatus,
+    ShipmentType,
+} from "../models/shipment";
 import { findHubByPincode } from "./hubService";
 import { CreateShipmentPayload } from "./shipmentService";
 import Shipment from "../models/shipment";
@@ -23,7 +29,6 @@ export const createReturnShipmentService = async (payload: CreateShipmentPayload
             expectedDeliveryDate,
             createdBy,
         } = payload;
-
 
         // Find Origin Hub
         const originHub = await findHubByPincode(sender.pincode);
@@ -104,4 +109,4 @@ export const createReturnShipmentService = async (payload: CreateShipmentPayload
     } finally {
         session.endSession();
     }
-}
+};

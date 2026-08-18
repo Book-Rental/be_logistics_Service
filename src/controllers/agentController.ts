@@ -1,17 +1,18 @@
 import {
     createAgentService,
     getAgentByHubIdService,
-    getAgentByIdServcie,
     getAllAgentService,
     updateAgentService,
     deleteAgentService,
     getAgentShipmentsService,
+    getAgentByIdService,
 } from "../services/agentService";
-import { Messages } from "../utils/constants";
+
 import { failResponse, successResponse } from "../utils/response";
 import { StatusCode } from "../utils/StatusCodes";
 import { Request, Response } from "express";
 import { uploadToCloudinary } from "../utils/uploadToCloudinary";
+import { HubEmployeeStatus } from "../models/hubEmployee";
 
 // POST /agents
 export const createAgent = async (req: Request, res: Response) => {
@@ -31,7 +32,6 @@ export const createAgent = async (req: Request, res: Response) => {
         const agent = await createAgentService({
             ...req.body,
             photo,
-            isActive: req.body.isActive !== undefined ? req.body.isActive === "true" : true,
         });
 
         return res.status(201).json({
@@ -57,17 +57,42 @@ export const createAgent = async (req: Request, res: Response) => {
         });
     }
 };
+
 // GET /agents?agentStatus=&vehicleType=&search=&page=&limit=
-export const getAllAgents = async (req: Request, res: Response) => {
+// GET /agents?agentStatus=&vehicleType=&search=&page=&limit=
+export const getAllAgents = async (
+    req: Request,
+    res: Response
+) => {
     try {
-        const { agentStatus, vehicleType, search, page, limit } = req.query;
+        const {
+            agentStatus,
+            vehicleType,
+            search,
+            page,
+            limit,
+        } = req.query;
 
         const result = await getAllAgentService({
-            agentStatus: agentStatus as string | undefined,
-            vehicleType: vehicleType as string | undefined,
-            search: search as string | undefined,
-            page: page ? Number(page) : undefined,
-            limit: limit ? Number(limit) : undefined,
+            agentStatus: agentStatus
+                ? (agentStatus as HubEmployeeStatus)
+                : undefined,
+
+            vehicleType: vehicleType
+                ? String(vehicleType)
+                : undefined,
+
+            search: search
+                ? String(search)
+                : undefined,
+
+            page: page
+                ? Number(page)
+                : undefined,
+
+            limit: limit
+                ? Number(limit)
+                : undefined,
         });
 
         return res.status(200).json({
@@ -75,9 +100,18 @@ export const getAllAgents = async (req: Request, res: Response) => {
             ...result,
         });
     } catch (error: any) {
-        return res.status(500).json({
+        console.error(
+            "Failed to fetch agents:",
+            error
+        );
+
+        return res.status(
+            error?.statusCode || StatusCode.Internal_Server_Error
+        ).json({
             success: false,
-            message: error?.message || "Failed to fetch agents",
+            message:
+                error?.message ||
+                "Failed to fetch agents",
         });
     }
 };
@@ -89,7 +123,7 @@ export const getAgentById = async (req: Request, res: Response) => {
         if (!agentId) {
             return failResponse(res, "Agent ID parameters are required", StatusCode.Bad_Request);
         }
-        const agent = await getAgentByIdServcie(agentId);
+        const agent = await getAgentByIdService(agentId);
 
         return successResponse(res, agent, "Agent fetched successfully", StatusCode.OK);
     } catch (error: any) {

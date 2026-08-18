@@ -1,84 +1,277 @@
-import Agent, { AgentStatus } from "../models/Agent";
-import { LogisticsRole } from "../models/LogisticsAuth";
+
+import LogisticsAuth, { LogisticsRole, LogisticsUserStatus } from "../models/LogisticsAuth";
 import { buildPaginationQuery } from "../utils/paginationHelper";
 import { createLogisticsUserService } from "./authService";
 import Hub from "../models/hub";
-import mongoose from "mongoose";
+import mongoose, { Types } from "mongoose";
 import shipment from "../models/shipment";
 import { StatusCode } from "../utils/StatusCodes";
+import hubEmployee, {
+    HubEmployeeRole,
+    HubEmployeeStatus,
+    VehicleType,
+
+} from "../models/hubEmployee";
+import HubEmployee from "../models/hubEmployee";
+import { generateEmployeeId } from "../utils/shipment";
 
 export const getAllAgentService = async (query: {
-    agentStatus?: string;
+    agentStatus?: HubEmployeeStatus;
     vehicleType?: string;
     search?: string;
     page?: number;
     limit?: number;
 }) => {
     try {
-        const { skip, limit, page } = buildPaginationQuery(query);
-        const { agentStatus, vehicleType, search } = query;
+        // -----------------------------------------
+        // 1. Pagination
+        // -----------------------------------------
 
-        // 1. Build initial strict match filters
-        const matchStage: any = { isActive: true };
+        const { skip, limit, page } =
+            buildPaginationQuery(query);
 
-        // NOTE: the schema field is `status`, not `agentStatus` - the query
-        // param stays `agentStatus` for API friendliness but must map to
-        // the real field, otherwise this filter matches nothing.
+        const {
+            agentStatus,
+            vehicleType,
+            search,
+        } = query;
+
+        // -----------------------------------------
+        // 2. Build Match Filter
+        // -----------------------------------------
+
+        const matchStage: any = {
+            // Only active employees
+            isActive: true,
+
+            // Only Agents
+            role: HubEmployeeRole.AGENT,
+        };
+
+        // -----------------------------------------
+        // 3. Status Filter
+        // -----------------------------------------
+
         if (agentStatus) {
             matchStage.status = agentStatus;
         }
+
+        // -----------------------------------------
+        // 4. Vehicle Type Filter
+        // -----------------------------------------
 
         if (vehicleType) {
             matchStage.vehicleType = vehicleType;
         }
 
-        // 2. Add text searching capability for agent names or email fields
-        if (search) {
+        // -----------------------------------------
+        // 5. Search
+        // -----------------------------------------
+
+        if (search?.trim()) {
+            const searchValue = search.trim();
+
             matchStage.$or = [
-                { fullName: { $regex: search, $options: "i" } },
-                { email: { $regex: search, $options: "i" } },
-                { phoneNumber: { $regex: search, $options: "i" } },
+                {
+                    employeeId: {
+                        $regex: searchValue,
+                        $options: "i",
+                    },
+                },
+                {
+                    fullName: {
+                        $regex: searchValue,
+                        $options: "i",
+                    },
+                },
+                {
+                    email: {
+                        $regex: searchValue,
+                        $options: "i",
+                    },
+                },
+                {
+                    phoneNumber: {
+                        $regex: searchValue,
+                        $options: "i",
+                    },
+                },
             ];
         }
 
-        // 3. High-performance single-pass processing via $facet
-        const pipeline: any[] = [
-            { $match: matchStage },
-            {
-                $facet: {
-                    data: [{ $sort: { createdAt: -1 } }, { $skip: skip }, { $limit: limit }],
-                    totalCount: [{ $count: "count" }],
+        // -----------------------------------------
+        // 6. Aggregation
+        // -----------------------------------------
+
+        const [facetResult] =
+            await HubEmployee.aggregate([
+                {
+                    $match: matchStage,
                 },
-            },
-        ];
 
-        const [facetResult] = await Agent.aggregate(pipeline);
+                {
+                    $facet: {
+                        data: [
+                            {
+                                $sort: {
+                                    createdAt: -1,
+                                },
+                            },
 
-        const rawAgents = facetResult?.data || [];
-        const totalRecords = facetResult?.totalCount?.[0]?.count || 0;
-        const totalPages = Math.ceil(totalRecords / limit) || 1;
-        const hasMore = page < totalPages;
+                            {
+                                $skip: skip,
+                            },
 
-        // 4. Format the final output stream matching your client response structures
-        const formattedAgents = rawAgents.map((agent: any) => ({
-            agentId: agent._id,
-            hubId: agent.hubId,
-            name: agent.fullName,
-            email: agent.email,
-            phone: agent.phoneNumber,
-            agentStatus: agent.status,
-            vehicleType: agent.vehicleType,
-            currentLocation: agent.currentLocation, // Embedded object with coordinates
-            joinedAt: agent.createdAt,
-        }));
+                            {
+                                $limit: limit,
+                            },
+
+                            // Get Hub details
+                            {
+                                $lookup: {
+                                    from: "hubs",
+                                    localField: "hubId",
+                                    foreignField: "_id",
+                                    as: "hub",
+                                },
+                            },
+
+                            {
+                                $unwind: {
+                                    path: "$hub",
+                                    preserveNullAndEmptyArrays: true,
+                                },
+                            },
+
+                            {
+                                $project: {
+                                    _id: 1,
+                                    employeeId: 1,
+                                    hubId: 1,
+                                    fullName: 1,
+                                    email: 1,
+                                    phoneNumber: 1,
+                                    role: 1,
+                                    status: 1,
+                                    isAvailable: 1,
+                                    vehicleType: 1,
+                                    vehicleNumber: 1,
+                                    currentLocation: 1,
+                                    currentShipmentId: 1,
+                                    photo: 1,
+                                    joinedOn: 1,
+                                    createdAt: 1,
+
+                                    "hub._id": 1,
+                                    "hub.name": 1,
+                                    "hub.hubCode": 1,
+                                },
+                            },
+                        ],
+
+                        totalCount: [
+                            {
+                                $count: "count",
+                            },
+                        ],
+                    },
+                },
+            ]);
+
+        // -----------------------------------------
+        // 7. Pagination Data
+        // -----------------------------------------
+
+        const rawAgents =
+            facetResult?.data || [];
+
+        const totalRecords =
+            facetResult?.totalCount?.[0]?.count || 0;
+
+        const totalPages =
+            Math.ceil(totalRecords / limit) || 1;
+
+        const hasMore =
+            page < totalPages;
+
+        // -----------------------------------------
+        // 8. Format Agents
+        // -----------------------------------------
+
+        const formattedAgents =
+            rawAgents.map((agent: any) => ({
+                // MongoDB ID
+                agentId: agent._id,
+
+                // Business Employee ID
+                employeeId: agent.employeeId,
+
+                hubId: agent.hubId,
+
+                hub: agent.hub
+                    ? {
+                          _id: agent.hub._id,
+                          name: agent.hub.name,
+                          hubCode: agent.hub.hubCode,
+                      }
+                    : null,
+
+                name: agent.fullName,
+
+                email: agent.email,
+
+                phone: agent.phoneNumber,
+
+                role: agent.role,
+
+                agentStatus: agent.status,
+
+                isAvailable:
+                    agent.isAvailable,
+
+                vehicle: {
+                    type:
+                        agent.vehicleType ??
+                        null,
+
+                    number:
+                        agent.vehicleNumber ??
+                        null,
+                },
+
+                currentLocation:
+                    agent.currentLocation ??
+                    null,
+
+                currentShipmentId:
+                    agent.currentShipmentId ??
+                    null,
+
+                photo:
+                    agent.photo ??
+                    null,
+
+                joinedAt:
+                    agent.joinedOn ??
+                    agent.createdAt,
+            }));
+
+        // -----------------------------------------
+        // 9. Response
+        // -----------------------------------------
 
         return {
             agents: formattedAgents,
+
             meta: {
                 totalRecords,
+
                 totalPages,
+
                 currentPage: page,
+
                 limit,
+
                 hasMore,
             },
         };
@@ -87,23 +280,32 @@ export const getAllAgentService = async (query: {
     }
 };
 
-interface CreateAgentPayload {
-    password: string;
+export interface CreateHubEmployeePayload {
     hubId: string;
+
     fullName: string;
     email: string;
+    password: string;
     phoneNumber: string;
-    vehicleType: string;
+
+    role: HubEmployeeRole;
+
+    vehicleType?: VehicleType;
     vehicleNumber?: string;
+
     address?: string;
     emergencyContact?: string;
     notes?: string;
     photo?: string;
+
+    createdBy?: Types.ObjectId;
+
     isActive?: boolean;
-    createdBy?: string;
 }
 
-export const createAgentService = async (payload: CreateAgentPayload) => {
+export const createAgentService = async (
+    payload: CreateHubEmployeePayload
+) => {
     const {
         hubId,
         fullName,
@@ -120,89 +322,204 @@ export const createAgentService = async (payload: CreateAgentPayload) => {
         isActive,
     } = payload;
 
-    const normalizedEmail = email.toLowerCase();
+    const normalizedEmail = email.toLowerCase().trim();
+
     const session = await mongoose.startSession();
 
     try {
-        let agent: any;
+        let hubEmployee: any;
 
         await session.withTransaction(async () => {
-            // Check Hub exists
+            // -----------------------------------------
+            // 1. Check Hub exists
+            // -----------------------------------------
+
             const hub = await Hub.findById(hubId).session(session);
+
             if (!hub) {
-                throw new Error("Hub not found");
+                const error: any = new Error("Hub not found");
+                error.statusCode = StatusCode.Not_Found;
+                throw error;
             }
 
-            // Check phone number uniqueness
-            const existingPhone = await Agent.findOne({ phoneNumber }).session(session);
+            // -----------------------------------------
+            // 2. Check Phone Number
+            // -----------------------------------------
+
+            const existingPhone = await HubEmployee.findOne({
+                phoneNumber,
+            }).session(session);
+
             if (existingPhone) {
-                throw new Error("Phone number already exists");
+                const error: any = new Error(
+                    "Phone number already exists"
+                );
+
+                error.statusCode = StatusCode.Conflict;
+                throw error;
             }
 
-            // Check email uniqueness
-            const existingEmail = await Agent.findOne({ email: normalizedEmail }).session(session);
+            // -----------------------------------------
+            // 3. Check Email
+            // -----------------------------------------
+
+            const existingEmail = await HubEmployee.findOne({
+                email: normalizedEmail,
+            }).session(session);
+
             if (existingEmail) {
-                throw new Error("Email already exists");
+                const error: any = new Error(
+                    "Email already exists"
+                );
+
+                error.statusCode = StatusCode.Conflict;
+                throw error;
             }
 
-            // Create Agent
-            [agent] = await Agent.create(
+            // -----------------------------------------
+            // 4. Generate Employee ID
+            // -----------------------------------------
+
+            let employeeId: string;
+
+            do {
+                employeeId = generateEmployeeId();
+
+                const existingEmployeeId =
+                    await HubEmployee.findOne({
+                        employeeId,
+                    }).session(session);
+
+                if (!existingEmployeeId) {
+                    break;
+                }
+            } while (true);
+
+            // -----------------------------------------
+            // 5. Create Hub Employee / Agent
+            // -----------------------------------------
+
+            [hubEmployee] = await HubEmployee.create(
                 [
                     {
+                        // MongoDB automatically creates _id
+                        // Business-level employee ID
+                        employeeId,
+
                         hubId,
+
                         fullName,
+
                         email: normalizedEmail,
+
                         phoneNumber,
+
+                        // This service creates only Agent
+                        role: HubEmployeeRole.AGENT,
+
                         vehicleType,
+
                         vehicleNumber,
+
                         address,
+
                         emergencyContact,
+
                         notes,
+
                         photo,
+
                         createdBy,
-                        isActive,
+
+                        isActive:
+                            isActive !== undefined
+                                ? isActive
+                                : true,
                     },
                 ],
-                { session }
+                {
+                    session,
+                }
             );
 
-            // Create Login User - runs inside the same transaction/session so
-            // the Agent and its LogisticsAuth record are created atomically
-            const logisticsUser = await createLogisticsUserService({
-                email: normalizedEmail,
-                password,
-                role: LogisticsRole.AGENT,
-                referenceId: agent._id.toString(),
-                createdBy,
+            // -----------------------------------------
+            // 6. Create Logistics Login
+            // -----------------------------------------
+
+            const logisticsUser =
+                await createLogisticsUserService({
+                    email: normalizedEmail,
+
+                    password,
+
+                    role: LogisticsRole.AGENT,
+
+                    referenceId:
+                        hubEmployee._id.toString(),
+
+                    createdBy:
+                        createdBy?.toString(),
+
+                    session,
+                });
+
+            // -----------------------------------------
+            // 7. Link Logistics Auth
+            // -----------------------------------------
+
+            hubEmployee.logisticsAuthId =
+                logisticsUser._id;
+
+            await hubEmployee.save({
                 session,
             });
-
-            // Link the Agent back to its login record
-            agent.logisticsAuthId = logisticsUser._id;
-            await agent.save({ session });
         });
 
-        return agent;
+        return hubEmployee;
     } finally {
         await session.endSession();
     }
 };
 
-export const getAgentByIdServcie = async (agentId: string) => {
+export const getAgentByIdService = async (agentId: string) => {
     try {
+        // -----------------------------------------
+        // 1. Validate Agent ID
+        // -----------------------------------------
+
         if (!mongoose.Types.ObjectId.isValid(agentId)) {
-            throw new Error("Invalid Agent ID format string requested");
+            const error: any = new Error("Invalid Agent ID format string requested");
+
+            error.statusCode = StatusCode.Bad_Request;
+
+            throw error;
         }
 
-        const agent = await Agent.findOne({ _id: agentId, isActive: true })
+        // -----------------------------------------
+        // 2. Find Agent
+        // -----------------------------------------
+
+        const agent = await HubEmployee.findOne({
+            _id: agentId,
+            role: HubEmployeeRole.AGENT,
+            // isActive: true,
+        })
             .populate({
                 path: "hubId",
                 select: "name hubCode",
             })
             .lean();
 
+        // -----------------------------------------
+        // 3. Agent not found
+        // -----------------------------------------
+
         if (!agent) {
-            throw new Error("Agent profile not found");
+            const error: any = new Error("Agent profile not found");
+
+            error.statusCode = StatusCode.Not_Found;
+
+            throw error;
         }
 
         return agent;
@@ -212,33 +529,60 @@ export const getAgentByIdServcie = async (agentId: string) => {
 };
 export const getAgentByHubIdService = async (
     hubId: string,
-    query: { page?: number; limit?: number; status?: AgentStatus } = {}
+    query: {
+        page?: number;
+        limit?: number;
+        status?: HubEmployeeStatus;
+    } = {}
 ) => {
     try {
-        // 1. Fail-fast guard against malformed ObjectId casting exceptions
+        // -----------------------------------------
+        // 1. Validate Hub ID
+        // -----------------------------------------
+
         if (!mongoose.Types.ObjectId.isValid(hubId)) {
             const error: any = new Error("Invalid Hub ID format string requested");
+
             error.statusCode = StatusCode.Bad_Request;
+
             throw error;
         }
 
-        // 2. Setup uniform pagination boundary data via your helper utility
+        // -----------------------------------------
+        // 2. Pagination
+        // -----------------------------------------
+
         const { skip, limit, page } = buildPaginationQuery(query);
 
-        // This main search filter respects user query changes
+        const hubObjectId = new mongoose.Types.ObjectId(hubId);
+
+        // -----------------------------------------
+        // 3. Base Agent Filter
+        // -----------------------------------------
+
+        const baseAgentFilter = {
+            hubId: hubObjectId,
+            role: HubEmployeeRole.AGENT,
+        };
+
+        // -----------------------------------------
+        // 4. Search Filter
+        // -----------------------------------------
+
         const searchFilter = {
-            hubId: new mongoose.Types.ObjectId(hubId),
-            isActive: true,
-            ...(query.status ? { status: query.status } : {}),
+            ...baseAgentFilter,
+
+            ...(query.status
+                ? {
+                    status: query.status,
+                }
+                : {}),
         };
 
-        // Base query layout used strictly to fetch complete status analytics for this Hub
-        const hubSummaryFilter = {
-            hubId: new mongoose.Types.ObjectId(hubId),
-            isActive: true,
-        };
+        // -----------------------------------------
+        // 5. Fetch Agents + Analytics
+        // -----------------------------------------
 
-        // 3. Parallelized data fetching, pagination matching, and structural count analytics counters
         const [
             agents,
             totalRecords,
@@ -246,58 +590,129 @@ export const getAgentByHubIdService = async (
             activeHubAgents,
             inactiveHubAgents,
             offDutyHubAgents,
+            onDeliveryHubAgents,
         ] = await Promise.all([
-            // Paginated record subset
-            Agent.find(searchFilter)
+            // -----------------------------------------
+            // Paginated Agents
+            // -----------------------------------------
+
+            HubEmployee.find(searchFilter)
                 .select(
-                    "agentId fullName email phoneNumber status isAvailable vehicleType vehicleNumber currentLocation currentShipmentId photo joinedOn"
+                    "employeeId fullName email phoneNumber role status isAvailable vehicleType vehicleNumber currentLocation currentShipmentId photo joinedOn isActive"
                 )
                 .sort({ createdAt: -1 })
                 .skip(skip)
                 .limit(limit)
                 .lean(),
 
-            // Total records matching current filtered search criteria (for page counts)
-            Agent.countDocuments(searchFilter),
+            // -----------------------------------------
+            // Total filtered agents
+            // -----------------------------------------
 
-            // 🚀 Analytics Counters: Checked across the entire hub, ignoring current viewport status filters
-            Agent.countDocuments(hubSummaryFilter),
-            Agent.countDocuments({ ...hubSummaryFilter, status: "Active" }), // Adjust lowercase/uppercase to match your Enum exactly
-            Agent.countDocuments({ ...hubSummaryFilter, status: "Inactive" }), // Adjust lowercase/uppercase to match your Enum exactly
-            Agent.countDocuments({ ...hubSummaryFilter, status: "Off Duty" }), // Adjust lowercase/uppercase to match your Enum exactly
+            HubEmployee.countDocuments(searchFilter),
+
+            // -----------------------------------------
+            // Total agents
+            // -----------------------------------------
+
+            HubEmployee.countDocuments(baseAgentFilter),
+
+            // -----------------------------------------
+            // Active agents
+            // -----------------------------------------
+
+            HubEmployee.countDocuments({
+                ...baseAgentFilter,
+                status: HubEmployeeStatus.ACTIVE,
+            }),
+
+            // -----------------------------------------
+            // Inactive agents
+            // -----------------------------------------
+
+            HubEmployee.countDocuments({
+                hubId: hubObjectId,
+                role: HubEmployeeRole.AGENT,
+                status: HubEmployeeStatus.INACTIVE,
+            }),
+
+            // -----------------------------------------
+            // Off Duty agents
+            // -----------------------------------------
+
+            HubEmployee.countDocuments({
+                ...baseAgentFilter,
+                status: HubEmployeeStatus.OFF_DUTY,
+            }),
+
+            // -----------------------------------------
+            // On Delivery agents
+            // -----------------------------------------
+
+            HubEmployee.countDocuments({
+                ...baseAgentFilter,
+                status: HubEmployeeStatus.ON_DELIVERY,
+            }),
         ]);
+
+        // -----------------------------------------
+        // 7. Pagination
+        // -----------------------------------------
 
         const totalPages = Math.ceil(totalRecords / limit) || 1;
 
-        // 4. Zero-overhead transformation map for MFE display components
+        // -----------------------------------------
+        // 8. Format Agents
+        // -----------------------------------------
+        // console.log("ALL HUB EMPLOYEES:", agents);
         const formattedAgents = agents.map((agent: any) => ({
             agentId: agent._id,
-            uniqueCode: agent.agentId,
+
+            employeeId: agent.employeeId,
+
             fullName: agent.fullName,
+
             email: agent.email,
+
             phoneNumber: agent.phoneNumber,
+
+            role: agent.role,
+
             status: agent.status,
+
             isAvailable: agent.isAvailable,
+
             vehicle: {
-                type: agent.vehicleType,
-                number: agent.vehicleNumber,
+                type: agent.vehicleType ?? null,
+                number: agent.vehicleNumber ?? null,
             },
+
             currentLocation: agent.currentLocation ?? null,
+
             currentShipmentId: agent.currentShipmentId ?? null,
+
             photo: agent.photo ?? null,
+
             joinedOn: agent.joinedOn,
         }));
 
+        // -----------------------------------------
+        // 9. Return
+        // -----------------------------------------
+
         return {
             agents: formattedAgents,
+
             analytics: {
                 totalAgents: totalHubAgents,
                 activeAgents: activeHubAgents,
                 inactiveAgents: inactiveHubAgents,
                 offDutyAgents: offDutyHubAgents,
+                onDeliveryAgents: onDeliveryHubAgents,
             },
+
             meta: {
-                totalRecords, // Items matching current active query filter combinations
+                totalRecords,
                 totalPages,
                 currentPage: page,
                 limit,
@@ -326,8 +741,14 @@ interface UpdateAgentPayload {
 }
 
 export const updateAgentService = async (agentId: string, payload: UpdateAgentPayload) => {
+    // -----------------------------------------
+    // 1. Validate Agent ID
+    // -----------------------------------------
+
     if (!mongoose.Types.ObjectId.isValid(agentId)) {
-        throw new Error("Invalid Agent ID");
+        const error: any = new Error("Invalid Agent ID");
+        error.statusCode = StatusCode.Bad_Request;
+        throw error;
     }
 
     const session = await mongoose.startSession();
@@ -336,33 +757,75 @@ export const updateAgentService = async (agentId: string, payload: UpdateAgentPa
         let updatedAgent: any;
 
         await session.withTransaction(async () => {
-            const agent = await Agent.findById(agentId).session(session);
+            // -----------------------------------------
+            // 2. Find Agent
+            // -----------------------------------------
+
+            const agent = await HubEmployee.findOne({
+                _id: agentId,
+                role: HubEmployeeRole.AGENT,
+            }).session(session);
+
             if (!agent) {
-                throw new Error("Agent not found");
+                const error: any = new Error("Agent not found");
+
+                error.statusCode = StatusCode.Not_Found;
+
+                throw error;
             }
 
-            // If phoneNumber is being changed, check uniqueness
+            // -----------------------------------------
+            // 3. Check Phone Number
+            // -----------------------------------------
+
             if (payload.phoneNumber && payload.phoneNumber !== agent.phoneNumber) {
-                const existingPhone = await Agent.findOne({
+                const existingPhone = await HubEmployee.findOne({
                     phoneNumber: payload.phoneNumber,
-                    _id: { $ne: agentId },
+                    _id: {
+                        $ne: agentId,
+                    },
                 }).session(session);
 
                 if (existingPhone) {
-                    throw new Error("Phone number already exists");
+                    const error: any = new Error("Phone number already exists");
+
+                    error.statusCode = StatusCode.Conflict;
+
+                    throw error;
                 }
             }
 
-            // If hubId is being changed, validate hub exists
+            // -----------------------------------------
+            // 4. Validate Hub
+            // -----------------------------------------
+
             if (payload.hubId) {
-                const hub = await Hub.findById(payload.hubId).session(session);
-                if (!hub) {
-                    throw new Error("Hub not found");
+                if (!mongoose.Types.ObjectId.isValid(payload.hubId)) {
+                    const error: any = new Error("Invalid Hub ID");
+
+                    error.statusCode = StatusCode.Bad_Request;
+
+                    throw error;
                 }
+
+                const hub = await Hub.findById(payload.hubId).session(session);
+
+                if (!hub) {
+                    const error: any = new Error("Hub not found");
+
+                    error.statusCode = StatusCode.Not_Found;
+
+                    throw error;
+                }
+
+                agent.hubId = new mongoose.Types.ObjectId(payload.hubId);
             }
 
-            // Update allowed fields
-            const allowedFields = [
+            // -----------------------------------------
+            // 5. Update Allowed Fields
+            // -----------------------------------------
+
+            const allowedFields: Array<keyof UpdateAgentPayload> = [
                 "fullName",
                 "phoneNumber",
                 "vehicleType",
@@ -372,37 +835,74 @@ export const updateAgentService = async (agentId: string, payload: UpdateAgentPa
                 "notes",
                 "photo",
                 "status",
-                "hubId",
                 "isActive",
                 "isAvailable",
             ];
 
             for (const field of allowedFields) {
-                if (payload[field as keyof UpdateAgentPayload] !== undefined) {
-                    (agent as any)[field] = payload[field as keyof UpdateAgentPayload];
+                const value = payload[field];
+
+                if (value !== undefined) {
+                    (agent as any)[field] = value;
                 }
             }
+
+            // -----------------------------------------
+            // 6. Updated By
+            // -----------------------------------------
 
             if (payload.updatedBy) {
                 agent.updatedBy = new mongoose.Types.ObjectId(payload.updatedBy);
             }
 
-            await agent.save({ session });
+            // -----------------------------------------
+            // 7. Save Agent
+            // -----------------------------------------
+
+            await agent.save({
+                session,
+            });
+
             updatedAgent = agent;
         });
 
-        // Return populated agent
-        return await Agent.findById(agentId)
-            .populate({ path: "hubId", select: "name hubCode" })
+        // -----------------------------------------
+        // 8. Return Updated Agent
+        // -----------------------------------------
+
+        const result = await HubEmployee.findOne({
+            _id: agentId,
+            role: HubEmployeeRole.AGENT,
+        })
+            .populate({
+                path: "hubId",
+                select: "name hubCode",
+            })
             .lean();
+
+        if (!result) {
+            const error: any = new Error("Updated Agent not found");
+
+            error.statusCode = StatusCode.Not_Found;
+
+            throw error;
+        }
+
+        return result;
     } finally {
         await session.endSession();
     }
 };
 
 export const deleteAgentService = async (agentId: string, updatedBy?: string) => {
+    // -----------------------------------------
+    // 1. Validate Agent ID
+    // -----------------------------------------
+
     if (!mongoose.Types.ObjectId.isValid(agentId)) {
-        throw new Error("Invalid Agent ID");
+        const error: any = new Error("Invalid Agent ID");
+        error.statusCode = StatusCode.Bad_Request;
+        throw error;
     }
 
     const session = await mongoose.startSession();
@@ -411,37 +911,73 @@ export const deleteAgentService = async (agentId: string, updatedBy?: string) =>
         let result: any;
 
         await session.withTransaction(async () => {
-            const agent = await Agent.findById(agentId).session(session);
-            if (!agent || !agent.isActive) {
-                throw new Error("Agent not found");
+            // -----------------------------------------
+            // 2. Find Agent from HubEmployee
+            // -----------------------------------------
+
+            const agent = await HubEmployee.findOne({
+                _id: agentId,
+                role: HubEmployeeRole.AGENT,
+            }).session(session);
+
+            if (!agent) {
+                const error: any = new Error("Agent not found");
+
+                error.statusCode = StatusCode.Not_Found;
+
+                throw error;
             }
 
-            // Soft delete the agent
+            // -----------------------------------------
+            // 3. Soft Delete Agent
+            // -----------------------------------------
+
             agent.isActive = false;
-            agent.status = AgentStatus.INACTIVE;
+            agent.status = HubEmployeeStatus.INACTIVE;
+
             if (updatedBy) {
                 agent.updatedBy = new mongoose.Types.ObjectId(updatedBy);
             }
-            await agent.save({ session });
 
-            // Deactivate the associated LogisticsAuth record
-            if (agent.logisticsAuthId) {
-                await mongoose.model("LogisticsAuth").findByIdAndUpdate(
-                    agent.logisticsAuthId,
-                    {
-                        $set: {
-                            isActive: false,
-                            status: "BLOCKED",
-                            updatedBy: updatedBy
-                                ? new mongoose.Types.ObjectId(updatedBy)
-                                : undefined,
-                        },
-                    },
-                    { session }
-                );
+            await agent.save({
+                session,
+            });
+
+            // -----------------------------------------
+            // 4. Find LogisticsAuth using referenceId
+            // -----------------------------------------
+
+            const logisticsAuth = await LogisticsAuth.findOne({
+                referenceId: agent._id,
+                role: LogisticsRole.AGENT,
+            }).session(session);
+
+            // -----------------------------------------
+            // 5. Deactivate Login Account
+            // -----------------------------------------
+
+            if (logisticsAuth) {
+                logisticsAuth.isActive = false;
+                logisticsAuth.status = LogisticsUserStatus.BLOCKED;
+
+                if (updatedBy) {
+                    logisticsAuth.updatedBy = new mongoose.Types.ObjectId(updatedBy);
+                }
+
+                await logisticsAuth.save({
+                    session,
+                });
             }
 
-            result = { agentId: agent._id, isActive: false };
+            // -----------------------------------------
+            // 6. Response
+            // -----------------------------------------
+
+            result = {
+                agentId: agent._id,
+                isActive: false,
+                status: HubEmployeeStatus.INACTIVE,
+            };
         });
 
         return result;

@@ -6,6 +6,7 @@ import mongoose from "mongoose";
 import { StatusCode } from "../utils/StatusCodes";
 import shipment, { JourneyType, ShipmentStatus } from "../models/shipment";
 import { buildPaginationQuery } from "../utils/paginationHelper";
+import { HubEmployeeRole } from "../models/hubEmployee";
 
 interface CreateHubPayload {
     hubName: string;
@@ -264,9 +265,41 @@ export const getShipmentsByHubService = async (hubId: string, query: GetShipment
                         // Populate currentAgentId manually
                         {
                             $lookup: {
-                                from: "agents", // Ensure this matches collection name exactly
-                                localField: "currentAgentId",
-                                foreignField: "_id",
+                                from: "hubemployees",
+
+                                let: {
+                                    agentId: "$currentAgentId",
+                                },
+
+                                pipeline: [
+                                    {
+                                        $match: {
+                                            $expr: {
+                                                $and: [
+                                                    {
+                                                        $eq: [
+                                                            "$_id",
+                                                            "$$agentId",
+                                                        ],
+                                                    },
+                                                    {
+                                                        $eq: [
+                                                            "$role",
+                                                            HubEmployeeRole.AGENT,
+                                                        ],
+                                                    },
+                                                    // {
+                                                    //     $eq: [
+                                                    //         "$isActive",
+                                                    //         true,
+                                                    //     ],
+                                                    // },
+                                                ],
+                                            },
+                                        },
+                                    },
+                                ],
+
                                 as: "assignedAgent",
                             },
                         },
@@ -324,27 +357,27 @@ export const getShipmentsByHubService = async (hubId: string, query: GetShipment
             journeyType: ship.journeyType || null,
             originHub: ship.originHub
                 ? {
-                      _id: ship.originHub._id,
-                      name: ship.originHub.name,
-                      hubCode: ship.originHub.hubCode,
-                      city: ship.originHub.city,
-                  }
+                    _id: ship.originHub._id,
+                    name: ship.originHub.name,
+                    hubCode: ship.originHub.hubCode,
+                    city: ship.originHub.city,
+                }
                 : null,
             destinationHub: ship.destinationHub
                 ? {
-                      _id: ship.destinationHub._id,
-                      name: ship.destinationHub.name,
-                      hubCode: ship.destinationHub.hubCode,
-                      city: ship.destinationHub.city,
-                  }
+                    _id: ship.destinationHub._id,
+                    name: ship.destinationHub.name,
+                    hubCode: ship.destinationHub.hubCode,
+                    city: ship.destinationHub.city,
+                }
                 : null,
             assignedAgent: ship.assignedAgent
                 ? {
-                      _id: ship.assignedAgent._id,
-                      fullName: ship.assignedAgent.fullName,
-                      phoneNumber: ship.assignedAgent.phoneNumber,
-                      status: ship.assignedAgent.status,
-                  }
+                    _id: ship.assignedAgent._id,
+                    fullName: ship.assignedAgent.fullName,
+                    phoneNumber: ship.assignedAgent.phoneNumber,
+                    status: ship.assignedAgent.status,
+                }
                 : null,
             receiverName: ship.receiver?.name ?? null,
             receiverCity: ship.receiver?.city ?? null,

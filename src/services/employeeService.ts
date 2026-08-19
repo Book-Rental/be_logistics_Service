@@ -429,12 +429,12 @@ export const getAllEmployeesService = async (query: {
 
                 hub: employee.hubId
                     ? {
-                          _id: employee.hubId._id,
-                          name: employee.hubId.name,
-                          hubCode: employee.hubId.hubCode,
-                          city: employee.hubId.city,
-                          state: employee.hubId.state,
-                      }
+                        _id: employee.hubId._id,
+                        name: employee.hubId.name,
+                        hubCode: employee.hubId.hubCode,
+                        city: employee.hubId.city,
+                        state: employee.hubId.state,
+                    }
                     : null,
 
                 vehicle: {
@@ -754,7 +754,7 @@ export const getEmployeeByHubIdService = async (
             employees,
             totalRecords,
         ] = await Promise.all([
-            HubEmployee.find() // IMPORTANT: use filter here
+            HubEmployee.find(filter) // IMPORTANT: use filter here
                 .select(
                     [
                         "_id",
@@ -824,12 +824,12 @@ export const getEmployeeByHubIdService = async (
 
                 hub: employee.hubId
                     ? {
-                          _id: employee.hubId._id,
-                          name: employee.hubId.name,
-                          hubCode: employee.hubId.hubCode,
-                          city: employee.hubId.city,
-                          state: employee.hubId.state,
-                      }
+                        _id: employee.hubId._id,
+                        name: employee.hubId.name,
+                        hubCode: employee.hubId.hubCode,
+                        city: employee.hubId.city,
+                        state: employee.hubId.state,
+                    }
                     : null,
 
                 vehicle: {

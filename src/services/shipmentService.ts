@@ -932,7 +932,7 @@ export const updateShipmentStatusService = async (payload: UpdateShipmentStatusP
             shipment.journeyType = JourneyType.DELIVERY;
 
             shipment.journeyDetails.push({
-                event: "Shipment arrived at destination hub",
+                event: event || "Arrived At Hub",
 
                 status: ShipmentStatus.ARRIVED_AT_DESTINATION_HUB,
 

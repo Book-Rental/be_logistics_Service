@@ -92,7 +92,7 @@ export const getEmployeeByHubId = async (req: Request, res: Response) => {
             return failResponse(res, "hubId is required.", StatusCode.Bad_Request);
         }
 
-        const employee = await getEmployeeByHubIdService(hubId);
+        const employee = await getEmployeeByHubIdService(hubId,req.query);
 
         if (!employee) {
             return failResponse(res, "Employee not found.", StatusCode.Not_Found);

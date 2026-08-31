@@ -23,10 +23,10 @@ export const createBookInspection = async (
     // 2. Inspection is allowed only for Pickup Assigned
     if (
         shipment.currentStatus !==
-        ShipmentStatus.PICKUP_ASSIGNED
+        ShipmentStatus.OUT_FOR_PICKUP
     ) {
         throw new Error(
-            `Inspection is allowed only when shipment status is "${ShipmentStatus.PICKUP_ASSIGNED}"`
+            `Inspection is allowed only when shipment status is "${ShipmentStatus.OUT_FOR_PICKUP}"`
         );
     }
 

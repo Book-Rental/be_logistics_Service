@@ -11,6 +11,19 @@ export enum PaymentMode {
     COD = "COD",
 }
 
+export enum InspectionCondition {
+    GOOD = "GOOD",
+    MINOR_DAMAGE = "MINOR_DAMAGE",
+    MAJOR_DAMAGE = "MAJOR_DAMAGE",
+    LOST = "LOST",
+}
+
+export enum InspectionStatus {
+    PENDING = "PENDING",
+    COMPLETED = "COMPLETED",
+}
+
+
 export enum ShipmentStatus {
     CREATED = "Created",
 
@@ -75,6 +88,8 @@ export enum JourneyEventType {
     DELIVERY_ATTEMPTED = "Delivery Attempted",
 
     DELIVERED = "Delivered",
+
+    INSPECTION_COMPLETED = "Inspection Completed",
 
     RETURN_INITIATED = "Return Initiated",
 
@@ -305,8 +320,58 @@ export interface IShipment extends Document {
     agentIds: Types.ObjectId[];
 
     parentShipmentId?: Types.ObjectId | null;
+
+    inspection?: {
+        condition: InspectionCondition;
+        inspectionStatus: InspectionStatus;
+        inspectedBy?: Types.ObjectId | null;
+        inspectedAt?: Date | null;
+        notes?: string;
+        images?: string[];
+    };
+
 }
 
+const InspectionSchema = new Schema(
+    {
+        condition: {
+            type: String,
+            enum: Object.values(InspectionCondition),
+            default: InspectionCondition.GOOD,
+        },
+
+        inspectionStatus: {
+            type: String,
+            enum: Object.values(InspectionStatus),
+            default: InspectionStatus.PENDING,
+        },
+
+        inspectedBy: {
+            type: Schema.Types.ObjectId,
+            ref: "HubEmployee",
+            default: null,
+        },
+
+        inspectedAt: {
+            type: Date,
+            default: null,
+        },
+
+        notes: {
+            type: String,
+            default: "",
+            trim: true,
+        },
+
+        images: {
+            type: [String],
+            default: [],
+        },
+    },
+    {
+        _id: false,
+    }
+);
 // =====================================================
 // Shipment Schema
 // =====================================================
@@ -422,6 +487,11 @@ const ShipmentSchema = new Schema<IShipment>(
             type: String,
             enum: Object.values(ShipmentStatus),
             default: ShipmentStatus.CREATED,
+        },
+
+        inspection: {
+            type: InspectionSchema,
+            default: null,
         },
 
         expectedDeliveryDate: {

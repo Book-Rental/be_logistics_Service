@@ -18,6 +18,7 @@ import {
     UpdateShipmentStatusPayload,
 } from "../utils/shipment";
 import hubEmployee, { HubEmployeeRole, HubEmployeeStatus } from "../models/HubEmployee";
+import { triggerRefund, triggerSellerPayout } from "./bookInspection.service";
 interface ContactPayload {
     name: string;
     phone: string;
@@ -425,6 +426,8 @@ export const getShipmentByIdService = async (shipmentId: string) => {
             currentStatus: shipment.currentStatus,
             expectedDeliveryDate: shipment.expectedDeliveryDate,
 
+            inspection: shipment.inspection,
+
             infrastructure: {
                 originHub: shipment.originHubId,
                 destinationHub: shipment.destinationHubId,
@@ -616,6 +619,7 @@ export const getShipmentByAgentIdService = async (
 
                 return {
                     ...shipment,
+                    inspection: shipment.inspection,
                     orderDetails,
                 };
             })
@@ -1055,7 +1059,9 @@ export const updateShipmentStatusService = async (payload: UpdateShipmentStatusP
         if (status === ShipmentStatus.DELIVERED) {
             try {
                 const orderItemStatus =
-                    shipment.shipmentType === ShipmentType.RETURN ? "returned" : "delivered";
+                    shipment.shipmentType === ShipmentType.RETURN
+                        ? "returned"
+                        : "delivered";
 
                 await updateOrderItemStatus(
                     shipment.orderId.toString(),
@@ -1072,7 +1078,8 @@ export const updateShipmentStatusService = async (payload: UpdateShipmentStatusP
                     "Failed to synchronize shipment state updates with the Order Service."
                 );
 
-                error.statusCode = StatusCode.Internal_Server_Error;
+                error.statusCode =
+                    StatusCode.Internal_Server_Error;
 
                 throw error;
             }
@@ -1116,6 +1123,32 @@ export const updateShipmentStatusService = async (payload: UpdateShipmentStatusP
         // =====================================================
 
         await shipment.save();
+
+        if (
+            status === ShipmentStatus.DELIVERED &&
+            shipment.shipmentType === ShipmentType.RETURN
+        ) {
+            const condition = shipment.inspection?.condition;
+
+            if (!condition) {
+                const error: any = new Error(
+                    "Book inspection condition is missing. Cannot process refund."
+                );
+
+                error.statusCode = StatusCode.Bad_Request;
+
+                throw error;
+            }
+
+            await triggerRefund(
+                shipment.orderItemId.toString(),
+                condition
+            );
+
+            await triggerSellerPayout(
+                shipment.orderItemId.toString()
+            );
+        }
 
         return shipment;
     } catch (error) {

@@ -1021,7 +1021,7 @@ export const updateShipmentStatusService = async (payload: UpdateShipmentStatusP
         // 15. OUT FOR DELIVERY
         // =====================================================
 
-        if (status === ShipmentStatus.OUT_FOR_DELIVERY) {
+        if (status === ShipmentStatus.OUT_FOR_DELIVERY ) {
             if (!agentId && !shipment.currentAgentId) {
                 const error: any = new Error("Delivery Agent Id is required.");
 
@@ -1029,7 +1029,8 @@ export const updateShipmentStatusService = async (payload: UpdateShipmentStatusP
 
                 throw error;
             }
-
+            if(shipment.shipmentType === ShipmentType.FORWARD){
+                
             try {
                 await updateOrderItemStatus(
                     shipment.orderId.toString(),
@@ -1049,6 +1050,7 @@ export const updateShipmentStatusService = async (payload: UpdateShipmentStatusP
                 error.statusCode = StatusCode.Internal_Server_Error;
 
                 throw error;
+            }
             }
         }
 

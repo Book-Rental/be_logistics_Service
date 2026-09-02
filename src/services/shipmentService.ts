@@ -199,35 +199,46 @@ export const readyForPickupService = async (shipmentId: string) => {
             // 3. Find Available Agent
             // -----------------------------------------
 
-            const pickupAgent = await hubEmployee
-                .findOne({
-                    hubId: shipment.originHubId,
-
-                    // Only Agent
-                    role: HubEmployeeRole.AGENT,
-
-                    // Agent must be active
-                    // isActive: true,
-
-                    // Agent must be available
-                    isAvailable: true,
-
-                    // Agent must be Active
-                    status: HubEmployeeStatus.ACTIVE,
-                })
-                .sort({
-                    updatedAt: 1,
-                })
+            const existingShipment = await Shipment.findOne({
+                orderId: shipment.orderId,
+                sellerId: shipment.sellerId,
+                _id: { $ne: shipment._id },
+                currentAgentId: { $ne: null },
+            })
+                .sort({ createdAt: 1 })
                 .session(session);
 
-            if (!pickupAgent) {
-                const error: any = new Error("No pickup agent available for this hub.");
+            let pickupAgent;
 
-                error.statusCode = StatusCode.Bad_Request;
-
-                throw error;
+            // Reuse agent already assigned to same Order + Seller
+            if (existingShipment?.currentAgentId) {
+                pickupAgent = await hubEmployee
+                    .findById(existingShipment.currentAgentId)
+                    .session(session);
             }
 
+            // If no existing agent, find a new available agent
+            if (!pickupAgent) {
+                pickupAgent = await hubEmployee
+                    .findOne({
+                        hubId: shipment.originHubId,
+                        role: HubEmployeeRole.AGENT,
+                        isAvailable: true,
+                        status: HubEmployeeStatus.ACTIVE,
+                    })
+                    .sort({ updatedAt: 1 })
+                    .session(session);
+
+                if (!pickupAgent) {
+                    const error: any = new Error(
+                        "No pickup agent available for this hub."
+                    );
+
+                    error.statusCode = StatusCode.Bad_Request;
+
+                    throw error;
+                }
+            }
             // -----------------------------------------
             // 4. Assign Pickup Agent
             // -----------------------------------------
@@ -300,9 +311,9 @@ export const readyForPickupService = async (shipmentId: string) => {
             // 10. Update Agent
             // -----------------------------------------
 
-            pickupAgent.isAvailable = false;
+            // pickupAgent.isAvailable = false;
 
-            pickupAgent.status = HubEmployeeStatus.ON_DELIVERY;
+            // pickupAgent.status = HubEmployeeStatus.ON_DELIVERY;
 
             pickupAgent.currentShipmentId = shipment._id;
 
@@ -1021,7 +1032,7 @@ export const updateShipmentStatusService = async (payload: UpdateShipmentStatusP
         // 15. OUT FOR DELIVERY
         // =====================================================
 
-        if (status === ShipmentStatus.OUT_FOR_DELIVERY ) {
+        if (status === ShipmentStatus.OUT_FOR_DELIVERY) {
             if (!agentId && !shipment.currentAgentId) {
                 const error: any = new Error("Delivery Agent Id is required.");
 
@@ -1029,28 +1040,28 @@ export const updateShipmentStatusService = async (payload: UpdateShipmentStatusP
 
                 throw error;
             }
-            if(shipment.shipmentType === ShipmentType.FORWARD){
-                
-            try {
-                await updateOrderItemStatus(
-                    shipment.orderId.toString(),
-                    shipment.orderItemId.toString(),
-                    "out_for_delivery"
-                );
-            } catch (apiError: any) {
-                console.error(
-                    `Order service synchronization failed for shipment: ${shipmentId}`,
-                    apiError.message
-                );
+            if (shipment.shipmentType === ShipmentType.FORWARD) {
 
-                const error: any = new Error(
-                    "Failed to synchronize shipment state updates with the Order Service."
-                );
+                try {
+                    await updateOrderItemStatus(
+                        shipment.orderId.toString(),
+                        shipment.orderItemId.toString(),
+                        "out_for_delivery"
+                    );
+                } catch (apiError: any) {
+                    console.error(
+                        `Order service synchronization failed for shipment: ${shipmentId}`,
+                        apiError.message
+                    );
 
-                error.statusCode = StatusCode.Internal_Server_Error;
+                    const error: any = new Error(
+                        "Failed to synchronize shipment state updates with the Order Service."
+                    );
 
-                throw error;
-            }
+                    error.statusCode = StatusCode.Internal_Server_Error;
+
+                    throw error;
+                }
             }
         }
 

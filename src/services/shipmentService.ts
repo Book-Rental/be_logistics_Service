@@ -1681,3 +1681,55 @@ export const getShipmentStatuseByAwbNumberService = async (awbNumber: string) =>
         throw error;
     }
 };
+
+export const getShipmentScanDetailsService = async (
+    awbNumber: string
+) => {
+    const shipment = await Shipment.findOne({ awbNumber })
+        .populate("originHubId")
+        .populate("destinationHubId")
+        .populate({
+            path: "currentAgentId",
+            select: "agentId fullName phoneNumber vehicleType status",
+        })
+        .lean();
+
+    if (!shipment) {
+        const error: any = new Error("Shipment not found.");
+        error.statusCode = StatusCode.Not_Found;
+        throw error;
+    }
+
+    const currentAgent = shipment.currentAgentId as any;
+
+    return {
+        shipmentId: shipment._id,
+        awbNumber: shipment.awbNumber,
+
+        sender: shipment.sender,
+        receiver: shipment.receiver,
+
+        shipmentType: shipment.shipmentType,
+        paymentMode: shipment.paymentMode,
+
+        originHub: shipment.originHubId,
+        destinationHub: shipment.destinationHubId,
+
+        currentStatus: shipment.currentStatus,
+
+        currentAgent: currentAgent
+            ? {
+                agentId: currentAgent.agentId,
+                fullName: currentAgent.fullName,
+                phone: currentAgent.phoneNumber,
+                vehicleType: currentAgent.vehicleType,
+            }
+            : null,
+
+        journeyDetails: shipment.journeyDetails.map((item: any) => ({
+            event: item.event,
+            status: item.status,
+            eventAt: item.eventAt,
+        })),
+    };
+};

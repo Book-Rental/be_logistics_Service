@@ -5,12 +5,14 @@ import authRoutes from "./authRoutes";
 import shipmentRoutes from "./shipmentRoutes";
 import employeeRoutes from "./employeeRoutes";
 import bookinspectionRoutes from "./bookinspectionRoutes";
+import bagRoutes from "./bagRoutes";
 
 const router = Router();
 
 router.use("/auth", authRoutes);
 router.use("/agent", agentRoutes);
 router.use("/hub", hubRoutes);
+router.use("/bag", bagRoutes);
 router.use("/shipment", shipmentRoutes);
 router.use("/employee", employeeRoutes);
 router.use("/book-inspection", bookinspectionRoutes);

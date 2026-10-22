@@ -9,6 +9,7 @@ import {
     getShipmentByAgentIdService,
     getShipmentByIdService,
     getShipmentByOrderItemIdService,
+    getShipmentScanDetailsService,
     getShipmentStatuseByAwbNumberService,
     readyForPickupService,
     updateShipmentStatusService,
@@ -16,6 +17,8 @@ import {
 import { Messages } from "../utils/constants";
 import mongoose from "mongoose";
 import { ShipmentStatus } from "../models/shipment";
+import { getShipmentLabelDataService } from "../services/shipmentLabelService";
+import { generateShipmentLabelPdfService } from "../services/shipmentLabelPdfService";
 
 export const createShipment = async (req: Request, res: Response) => {
     try {
@@ -279,6 +282,100 @@ export const getShipmentStatusByAWBNumber = async (req: Request, res: Response) 
             res,
             shipment,
             "Shipment status fetched successfully.",
+            StatusCode.OK
+        );
+    } catch (error: any) {
+        return failResponse(
+            res,
+            error.message,
+            error.statusCode || StatusCode.Internal_Server_Error
+        );
+    }
+};
+
+export const getShipmentLabel = async (req: Request, res: Response) => {
+    try {
+        const { awbNumber } = req.params as { awbNumber: string };
+
+        if (!awbNumber) {
+            return failResponse(
+                res,
+                "AWB number is required.",
+                StatusCode.Bad_Request
+            );
+        }
+
+        const labelData = await getShipmentLabelDataService(awbNumber);
+
+        return successResponse(
+            res,
+            labelData,
+            "Shipment label data fetched successfully.",
+            StatusCode.OK
+        );
+    } catch (error: any) {
+        return failResponse(
+            res,
+            error.message || "Something went wrong.",
+            error.statusCode || StatusCode.Internal_Server_Error
+        );
+    }
+};
+
+export const downloadShipmentLabelPdf = async (
+    req: Request,
+    res: Response
+) => {
+    try {
+        const { awbNumber } = req.params as { awbNumber: string };
+
+        if (!awbNumber) {
+            return failResponse(
+                res,
+                "AWB number is required.",
+                StatusCode.Bad_Request
+            );
+        }
+
+        const pdf = await generateShipmentLabelPdfService(awbNumber);
+
+        res.setHeader("Content-Type", "application/pdf");
+        res.setHeader(
+            "Content-Disposition",
+            `attachment; filename="label-${awbNumber}.pdf"`
+        );
+
+        return res.status(StatusCode.OK).send(pdf);
+    } catch (error: any) {
+        return failResponse(
+            res,
+            error.message || "Failed to generate shipment label.",
+            error.statusCode || StatusCode.Internal_Server_Error
+        );
+    }
+};
+
+export const getShipmentScanDetails = async (
+    req: Request,
+    res: Response
+) => {
+    try {
+        const { awbNumber } = req.params as { awbNumber: string };
+
+        if (!awbNumber) {
+            return failResponse(
+                res,
+                "AWB Number is required.",
+                StatusCode.Bad_Request
+            );
+        }
+
+        const shipment = await getShipmentScanDetailsService(awbNumber);
+
+        return successResponse(
+            res,
+            shipment,
+            "Shipment scan details fetched successfully.",
             StatusCode.OK
         );
     } catch (error: any) {

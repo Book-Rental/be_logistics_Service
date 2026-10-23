@@ -82,6 +82,22 @@ export const addShipmentsToBag = async (
         }
     }
 
+    const bagWithShipment = await Bag.findOne({
+        bagId: { $ne: bag.bagId },
+        status: { $ne: BagStatus.RELEASED },
+        shipmentIds: { $in: shipmentIds },
+    });
+
+    if (bagWithShipment) {
+        const clashId = bagWithShipment.shipmentIds
+            .map((id) => id.toString())
+            .find((id) => shipmentIds.includes(id));
+
+        throw new Error(
+            `Shipment ${clashId} is already in bag ${bagWithShipment.bagId}`
+        );
+    }
+
     const existingShipmentIds = bag.shipmentIds.map(
         (id) => id.toString()
     );
